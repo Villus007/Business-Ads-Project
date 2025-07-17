@@ -47,11 +47,22 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text('Business Ads'),
+        backgroundColor: const Color(0xFFFF6B35),
+        elevation: 0,
+        title: const Text(
+          'Business Ads',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadData,
             tooltip: 'Refresh',
           ),
@@ -59,8 +70,26 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
+        color: const Color(0xFFFF6B35),
         child: CustomScrollView(
           slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+            // Featured Ads Section Header
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  'Featured Ads',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFFF6B35),
+                  ),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
             // Featured Ads Section
             SliverToBoxAdapter(
               child: SizedBox(
@@ -69,7 +98,13 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                   future: _featuredAdsFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFFF6B35),
+                          ),
+                        ),
+                      );
                     }
                     if (snapshot.hasError) {
                       return _buildErrorWidget('Failed to load featured ads');
@@ -85,8 +120,8 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                         padding: const EdgeInsets.only(right: 12),
                         child: SizedBox(
                           width: 300,
-                          child: AdCard(
-                            ad: snapshot.data![index],
+                          child: _buildStyledAdCard(
+                            snapshot.data![index],
                             isFeatured: true,
                           ),
                         ),
@@ -96,7 +131,7 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                 ),
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
             // All Ads Section Header
             SliverPadding(
@@ -104,9 +139,10 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
               sliver: SliverToBoxAdapter(
                 child: Text(
                   'All Business Ads',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFFF6B35),
+                  ),
                 ),
               ),
             ),
@@ -117,8 +153,14 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
               future: _allAdsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
+                  return const SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFFFF6B35),
+                        ),
+                      ),
+                    ),
                   );
                 }
                 if (snapshot.hasError) {
@@ -139,30 +181,57 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
-                          childAspectRatio:
-                              0.9, // Adjusted for fixed height cards
+                          childAspectRatio: 0.9,
                         ),
                     delegate: SliverChildBuilderDelegate(
-                      (context, index) => AdCard(ad: snapshot.data![index]),
+                      (context, index) =>
+                          _buildStyledAdCard(snapshot.data![index]),
                       childCount: snapshot.data!.length,
                     ),
                   ),
                 );
               },
             ),
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: "add",
+        backgroundColor: const Color(0xFFFF6B35),
+        foregroundColor: Colors.white,
         onPressed: () async {
           final result = await Navigator.push<bool>(
             context,
             MaterialPageRoute(builder: (ctx) => const AddBusinessScreen()),
           );
-          if (result == true) _loadData(); // Refresh if new ad was added
+          if (result == true) _loadData();
         },
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildStyledAdCard(BusinessAd ad, {bool isFeatured = false}) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: isFeatured
+              ? const LinearGradient(
+                  colors: [Color(0xFFFF6B35), Color(0xFFFF8A65)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: isFeatured ? null : Colors.white,
+          border: isFeatured
+              ? null
+              : Border.all(color: const Color(0xFFFF6B35).withOpacity(0.3)),
+        ),
+        child: AdCard(ad: ad, isFeatured: isFeatured),
       ),
     );
   }
@@ -172,10 +241,23 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+          const Icon(Icons.error_outline, size: 48, color: Color(0xFFFF6B35)),
           const SizedBox(height: 16),
-          Text(message, style: Theme.of(context).textTheme.bodyLarge),
-          TextButton(onPressed: _loadData, child: const Text('Retry')),
+          Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: const Color(0xFFFF6B35)),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: _loadData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B35),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Retry'),
+          ),
         ],
       ),
     );
@@ -186,9 +268,14 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.hourglass_empty, size: 48, color: Colors.grey),
+          const Icon(Icons.hourglass_empty, size: 48, color: Color(0xFFFF6B35)),
           const SizedBox(height: 16),
-          Text(message, style: Theme.of(context).textTheme.bodyLarge),
+          Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: const Color(0xFFFF6B35)),
+          ),
         ],
       ),
     );
