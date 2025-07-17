@@ -54,21 +54,19 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
       );
 
       if (images.isNotEmpty) {
-        // Validate image count
         if (images.length > 10) {
           setState(() => _errorMessage = 'Maximum 10 images allowed');
           _showErrorSnackbar(_errorMessage!);
           return;
         }
 
-        // Validate file sizes
         for (final image in images) {
           final bytes = await image.readAsBytes();
           if (bytes.length > _maxFileSize) {
-            setState(
-              () => _errorMessage =
-                  'Image ${image.name} is too large. Maximum size is 5MB',
-            );
+            setState(() {
+              _errorMessage =
+                  'Image ${image.name} is too large. Maximum size is 5MB';
+            });
             _showErrorSnackbar(_errorMessage!);
             return;
           }
@@ -108,25 +106,18 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
       final List<String> imageUrls = [];
       final int totalImages = _selectedImages.length;
 
-      // Upload images with progress tracking
       for (int i = 0; i < totalImages; i++) {
         final image = _selectedImages[i];
-
-        // Update overall progress
         final baseProgress = i / totalImages;
         setState(() {
           _uploadProgress = baseProgress;
         });
 
-        // Read and optimize image
         Uint8List bytes = await image.readAsBytes();
-
-        // Compress image for better performance
         if (!kIsWeb) {
           bytes = await _compressImage(bytes, image.name);
         }
 
-        // Upload with individual progress tracking
         final url = await apiService.uploadImageBytes(
           bytes,
           filename: _generateUniqueFilename(image.name),
@@ -141,7 +132,6 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
         print('✅ Uploaded image ${i + 1}/$totalImages: ${image.name}');
       }
 
-      // Submit ad data
       setState(() => _uploadProgress = 0.95);
 
       final ad = BusinessAd(
@@ -158,15 +148,10 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
         _successMessage = 'Ad submitted successfully!';
       });
 
-      // Show success message
       _showSuccessSnackbar(_successMessage!);
-
-      // Wait briefly then navigate back
       await Future.delayed(const Duration(seconds: 1));
 
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       setState(() {
         _errorMessage = 'Submission failed: ${e.toString()}';
@@ -177,16 +162,12 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     }
   }
 
-  /// Compress image for optimal performance
   Future<Uint8List> _compressImage(Uint8List bytes, String filename) async {
     try {
-      // Determine target quality based on file size
       int targetQuality = _imageQuality;
       if (bytes.length > 2 * 1024 * 1024) {
-        // > 2MB
         targetQuality = 70;
       } else if (bytes.length > 1 * 1024 * 1024) {
-        // > 1MB
         targetQuality = 80;
       }
 
@@ -211,7 +192,6 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     }
   }
 
-  /// Generate unique filename to prevent conflicts
   String _generateUniqueFilename(String originalFilename) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final random = math.Random().nextInt(1000);
@@ -219,7 +199,6 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     return 'ad_${timestamp}_$random.$extension';
   }
 
-  /// Format bytes for display
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -239,12 +218,11 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                 Image.memory(
                   snapshot.data!,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  errorBuilder: (c, e, st) => Container(
                     color: Colors.grey[300],
                     child: const Icon(Icons.error, color: Colors.red),
                   ),
                 ),
-                // Image info overlay
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -267,6 +245,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
+                        fontFamily: 'Montserrat',
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -303,6 +282,8 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
           ],
         ),
         backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 4),
       ),
     );
@@ -319,6 +300,8 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
           ],
         ),
         backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -326,143 +309,186 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Submit Business Ad'),
-        centerTitle: true,
-        actions: [
-          if (_isSubmitting)
-            const Padding(
-              padding: EdgeInsets.only(right: 16.0),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+    // Custom theme to match the mockup
+    final customTheme = Theme.of(context).copyWith(
+      scaffoldBackgroundColor: Colors.white,
+      textTheme: Theme.of(context).textTheme.copyWith(
+            titleMedium: const TextStyle(
+              fontFamily: 'Montserrat',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF333333),
+            ),
+            bodySmall: const TextStyle(
+              fontFamily: 'Montserrat',
+              fontSize: 12,
+              fontWeight: FontWeight.normal,
+              color: Color(0xFF4A4A4A),
+            ),
+            bodyMedium: const TextStyle(
+              fontFamily: 'Montserrat',
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+              color: Color(0xFF333333),
+            ),
+          ),
+      cardTheme: const CardThemeData(
+          color: Colors.white,
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+          margin: EdgeInsets.zero,
+        ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFF5F5F5),
+        labelStyle: const TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF333333),
+        ),
+        hintStyle: const TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 14,
+          color: Color(0xFFAAAAAA),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFCCCCCC)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFFFA500)),
+        ),
+        prefixIconColor: const Color(0xFF333333),
+        alignLabelWithHint: true,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          textStyle: const TextStyle(
+            fontFamily: 'Montserrat',
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFF333333),
+          side: const BorderSide(color: Color(0xFF333333)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          textStyle: const TextStyle(
+            fontFamily: 'Montserrat',
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+      dividerColor: const Color(0xFFCCCCCC),
+    );
+
+    return Theme(
+      data: customTheme,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: Colors.black),
+          title: const Text(
+            'Submit an Ad',
+            style: TextStyle(
+              fontFamily: 'Montserrat',
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFFFA500), Colors.white],
               ),
             ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Form fields
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Business Title *',
-                    hintText: 'Enter your business name',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.business),
+          ),
+          actions: [
+            if (_isSubmitting)
+              const Padding(
+                padding: EdgeInsets.only(right: 16.0),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  validator: (value) {
-                    if (value?.trim().isEmpty ?? true) {
-                      return 'Business title is required';
-                    }
-                    if (value!.trim().length < 3) {
-                      return 'Title must be at least 3 characters';
-                    }
-                    return null;
-                  },
-                  textInputAction: TextInputAction.next,
-                  maxLength: 50,
                 ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Business Description *',
-                    hintText: 'Describe your business and services',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.description),
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 4,
-                  validator: (value) {
-                    if (value?.trim().isEmpty ?? true) {
-                      return 'Business description is required';
-                    }
-                    if (value!.trim().length < 10) {
-                      return 'Description must be at least 10 characters';
-                    }
-                    return null;
-                  },
-                  maxLength: 200,
-                ),
-                const SizedBox(height: 24),
-
-                // Image selection
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Business Images *',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Select up to 10 images (max 5MB each)',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 16),
-
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.add_photo_alternate),
-                          label: Text(
-                            _selectedImages.isEmpty
-                                ? 'Select Images'
-                                : 'Change Images',
-                          ),
-                          onPressed: _isSubmitting ? null : _pickImages,
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 48),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Selected: ${_selectedImages.length} image(s)',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            if (_selectedImages.isNotEmpty)
-                              TextButton.icon(
-                                onPressed: _isSubmitting
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _selectedImages.clear();
-                                          _successMessage = null;
-                                        });
-                                      },
-                                icon: const Icon(Icons.clear, size: 16),
-                                label: const Text('Clear All'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
+              ),
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Form fields
+                  TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Business Title *',
+                      hintText: 'Enter your business name',
+                      prefixIcon: Icon(Icons.business),
                     ),
+                    validator: (value) {
+                      if (value?.trim().isEmpty ?? true) {
+                        return 'Business title is required';
+                      }
+                      if (value!.trim().length < 3) {
+                        return 'Title must be at least 3 characters';
+                      }
+                      return null;
+                    },
+                    textInputAction: TextInputAction.next,
+                    maxLength: 50,
                   ),
-                ),
-
-                // Image preview grid
-                if (_selectedImages.isNotEmpty) ...[
                   const SizedBox(height: 16),
+
+                  TextFormField(
+                    controller: _descController,
+                    decoration: const InputDecoration(
+                      labelText: 'Business Description *',
+                      hintText: 'Describe your business and services',
+                      prefixIcon: Icon(Icons.description),
+                    ),
+                    maxLines: 4,
+                    validator: (value) {
+                      if (value?.trim().isEmpty ?? true) {
+                        return 'Business description is required';
+                      }
+                      if (value!.trim().length < 10) {
+                        return 'Description must be at least 10 characters';
+                      }
+                      return null;
+                    },
+                    maxLength: 200,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Image selection
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -470,167 +496,236 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Image Preview',
+                            'Business Images *',
                             style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 12),
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                  childAspectRatio: 1,
-                                ),
-                            itemCount: _selectedImages.length,
-                            itemBuilder: (context, index) => Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                _buildImagePreview(_selectedImages[index]),
-                                Positioned(
-                                  top: 4,
-                                  right: 4,
-                                  child: GestureDetector(
-                                    onTap: _isSubmitting
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _selectedImages.removeAt(index);
-                                            });
-                                          },
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.red.withOpacity(0.8),
-                                      ),
-                                      padding: const EdgeInsets.all(4),
-                                      child: const Icon(
-                                        Icons.close,
-                                        size: 14,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Upload progress
-                if (_isSubmitting) ...[
-                  const SizedBox(height: 24),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Text(
-                            'Uploading Ad...',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 12),
-                          LinearProgressIndicator(
-                            value: _uploadProgress,
-                            minHeight: 8,
-                            borderRadius: BorderRadius.circular(4),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${(_uploadProgress * 100).toStringAsFixed(1)}% complete',
+                            'Select up to 10 images (max 5MB each)',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
+                          const SizedBox(height: 16),
+
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.add_photo_alternate),
+                            label: Text(
+                              _selectedImages.isEmpty
+                                  ? 'Select Images'
+                                  : 'Change Images',
+                            ),
+                            onPressed: _isSubmitting ? null : _pickImages,
+                            style: null,
+                          ),
+
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Selected: ${_selectedImages.length} image(s)',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              if (_selectedImages.isNotEmpty)
+                                TextButton.icon(
+                                  onPressed: _isSubmitting
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _selectedImages.clear();
+                                            _successMessage = null;
+                                          });
+                                        },
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  label: const Text('Clear All'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
                   ),
-                ],
 
-                // Status messages
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
+                  if (_selectedImages.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Image Preview',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                childAspectRatio: 1,
+                              ),
+                              itemCount: _selectedImages.length,
+                              itemBuilder: (context, index) => Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  _buildImagePreview(_selectedImages[index]),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: GestureDetector(
+                                      onTap: _isSubmitting
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                _selectedImages.removeAt(index);
+                                              });
+                                            },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.red.withOpacity(0.8),
+                                        ),
+                                        padding: const EdgeInsets.all(4),
+                                        child: const Icon(
+                                          Icons.close,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                if (_successMessage != null && !_isSubmitting) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    color: Colors.green.shade50,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.check_circle, color: Colors.green),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _successMessage!,
-                              style: const TextStyle(color: Colors.green),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Submit button
-                const SizedBox(height: 32),
-                ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitAd,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Submit Business Ad',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          ],
                         ),
-                ),
-                const SizedBox(height: 16),
-              ],
+                      ),
+                    ),
+                  ],
+
+                  if (_isSubmitting) ...[
+                    const SizedBox(height: 24),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Uploading Ad...',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: _uploadProgress,
+                                minHeight: 8,
+                                valueColor:
+                                    const AlwaysStoppedAnimation(Colors.black),
+                                backgroundColor: const Color(0xFFF5F5F5),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${(_uploadProgress * 100).toStringAsFixed(1)}% complete',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontFamily: 'Montserrat',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  if (_successMessage != null && !_isSubmitting) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      color: Colors.green.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _successMessage!,
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontFamily: 'Montserrat',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitAd,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: const StadiumBorder(),
+                      padding: EdgeInsets.zero,
+                      textStyle: const TextStyle(
+                        fontFamily: 'Montserrat',
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Submit an Ad'),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
           ),
         ),
