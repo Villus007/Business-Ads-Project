@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/business_ad.dart';
 
 // Move enum to top-level
@@ -10,12 +11,47 @@ class ApiService extends ChangeNotifier {
   static const String _baseUrl =
       "https://um7x7rirpc.execute-api.us-east-1.amazonaws.com/prod";
 
+  // Development mode flag - set to true to work with local storage instead of AWS
+  static const bool _isDevelopmentMode = false;
+
   // Image upload strategy
   static const ImageUploadStrategy _uploadStrategy =
       ImageUploadStrategy.preSignedUrl;
 
+  // Local cache for user information (temporary solution)
+  final Map<String, Map<String, dynamic>> _userInfoCache = {};
+
+  // Additional cache by username for fallback lookup
+  final Map<String, Map<String, dynamic>> _userInfoByName = {};
+
   // Constructor
-  ApiService();
+  ApiService() {
+    // Pre-populate cache with known usernames from previous sessions
+    _initializeKnownUsers();
+  }
+
+  void _initializeKnownUsers() {
+    // Add known usernames that may exist on the server
+    final knownUsers = [
+      'Tasty Food Biz',
+      'Best Burgers',
+      'Pizza Palace',
+      'Coffee Corner',
+      'Sweet Treats',
+    ];
+
+    for (final userName in knownUsers) {
+      final userId = userName.toLowerCase().replaceAll(' ', '_');
+      _userInfoByName[userName.toLowerCase()] = {
+        'userName': userName,
+        'userId': userId,
+        'userProfileImage': null,
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+    }
+
+    print('📝 Pre-populated ${knownUsers.length} known usernames in cache');
+  }
 
   /// Primary image upload method using pre-signed URL strategy (recommended)
   Future<String> uploadImageWithPreSignedUrl(
@@ -166,6 +202,17 @@ class ApiService extends ChangeNotifier {
   /// Enhanced submitAd method with better error handling
   Future<void> submitAd(BusinessAd ad) async {
     try {
+      // Cache user information locally for this ad (both by ID and username)
+      final userInfo = {
+        'userName': ad.userName,
+        'userId': ad.userId,
+        'userProfileImage': ad.userProfileImage,
+        'createdAt': ad.createdAt.toIso8601String(),
+      };
+
+      _userInfoCache[ad.id] = userInfo;
+      _userInfoByName[ad.userName.toLowerCase()] = userInfo;
+
       print('🚀 Submitting ad to AWS: ${ad.title}');
       print('📄 Ad data: ${jsonEncode(ad.toJson())}');
       print('🌐 API URL: $_baseUrl/');
@@ -189,8 +236,11 @@ class ApiService extends ChangeNotifier {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         print('✅ Ad submitted successfully to AWS');
+        print('💾 User info cached locally for ad: ${ad.id}');
         notifyListeners();
       } else {
+        // Remove from cache if submission failed
+        _userInfoCache.remove(ad.id);
         final errorBody = response.body;
         print('❌ HTTP Error: ${response.statusCode} - $errorBody');
         throw Exception(
@@ -252,7 +302,7 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  /// Enhanced getBusinessAds with better error handling
+  /// Enhanced getBusinessAds with better error handling and user info merging
   Future<List<BusinessAd>> getBusinessAds() async {
     // Fetch from AWS
     try {
@@ -269,11 +319,57 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         final List<dynamic> adsJson = responseData['ads'] ?? [];
-        final List<BusinessAd> ads = adsJson
-            .map((adJson) => BusinessAd.fromJson(adJson))
-            .toList();
+        final List<BusinessAd> ads = adsJson.map((adJson) {
+          // Create ad from server data
+          BusinessAd ad = BusinessAd.fromJson(adJson);
+
+          print(
+            '🔍 Processing ad: ${ad.title} - Username: "${ad.userName}" - ID: ${ad.id}',
+          );
+
+          // Merge with cached user info if available (try by ID first, then by username)
+          Map<String, dynamic>? cachedInfo;
+
+          if (_userInfoCache.containsKey(ad.id)) {
+            cachedInfo = _userInfoCache[ad.id];
+            print('💰 Found cached info by ID for: ${ad.id}');
+          } else if (_userInfoByName.containsKey(ad.userName.toLowerCase())) {
+            // Try username lookup for any ad that has a username (including server-returned usernames)
+            cachedInfo = _userInfoByName[ad.userName.toLowerCase()];
+            print('👤 Found cached info by username for: "${ad.userName}"');
+          } else {
+            print(
+              '❌ No cached info found for: "${ad.userName}" (ID: ${ad.id})',
+            );
+            print(
+              '📋 Available usernames in cache: ${_userInfoByName.keys.toList()}',
+            );
+          }
+
+          if (cachedInfo != null) {
+            ad = BusinessAd(
+              id: ad.id,
+              title: ad.title,
+              description: ad.description,
+              imageUrls: ad.imageUrls,
+              userName: cachedInfo['userName'] ?? ad.userName,
+              userId: cachedInfo['userId'] ?? ad.userId,
+              userProfileImage:
+                  cachedInfo['userProfileImage'] ?? ad.userProfileImage,
+              createdAt: cachedInfo['createdAt'] != null
+                  ? DateTime.parse(cachedInfo['createdAt']!)
+                  : ad.createdAt,
+            );
+            print(
+              '🔄 Merged cached user info for ad: ${ad.id} - User: ${ad.userName}',
+            );
+          }
+
+          return ad;
+        }).toList();
 
         print('🌐 Fetched ${ads.length} ads from AWS');
+        print('💾 Active cache entries: ${_userInfoCache.length}');
         return ads;
       } else {
         throw Exception('Failed to fetch ads: HTTP ${response.statusCode}');
@@ -281,6 +377,84 @@ class ApiService extends ChangeNotifier {
     } catch (e) {
       print('❌ Error fetching ads: $e');
       return [];
+    }
+  }
+
+  /// Delete a business ad
+  Future<bool> deleteBusinessAd(String adId) async {
+    try {
+      print('🗑️ Deleting ad: $adId');
+
+      if (_isDevelopmentMode) {
+        // In development mode, just remove from local storage
+        print('🔧 Development mode: Removing from local storage');
+
+        final prefs = await SharedPreferences.getInstance();
+        final adsJson = prefs.getString('business_ads') ?? '[]';
+        final List<dynamic> adsList = json.decode(adsJson);
+
+        // Remove the ad with matching ID
+        adsList.removeWhere((ad) => ad['id'] == adId);
+
+        // Save back to local storage
+        await prefs.setString('business_ads', json.encode(adsList));
+
+        // Remove from local cache
+        _userInfoCache.remove(adId);
+
+        // Notify listeners to refresh UI
+        notifyListeners();
+        print('✅ Ad deleted from local storage');
+        return true;
+      } else {
+        // In production mode, send delete request as POST with delete action
+        // Since your API Gateway doesn't support DELETE method, we'll use POST with action
+        final response = await http
+            .post(
+              Uri.parse('$_baseUrl/'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: json.encode({'action': 'delete', 'adId': adId}),
+            )
+            .timeout(const Duration(seconds: 30));
+
+        print('📡 Delete response status: ${response.statusCode}');
+        print('📡 Delete response body: ${response.body}');
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          // Parse the response to check if deletion was successful
+          try {
+            final responseData = json.decode(response.body);
+            final success = responseData['success'] ?? false;
+
+            if (success) {
+              print('✅ Ad deleted successfully');
+
+              // Remove from local cache
+              _userInfoCache.remove(adId);
+
+              // Notify listeners to refresh UI
+              notifyListeners();
+              return true;
+            } else {
+              final error = responseData['error'] ?? 'Unknown error';
+              print('❌ Delete failed: $error');
+              return false;
+            }
+          } catch (e) {
+            print('❌ Error parsing delete response: $e');
+            return false;
+          }
+        } else {
+          print('❌ Failed to delete ad: HTTP ${response.statusCode}');
+          return false;
+        }
+      }
+    } catch (e) {
+      print('❌ Error deleting ad: $e');
+      return false;
     }
   }
 }

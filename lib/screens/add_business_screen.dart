@@ -17,6 +17,7 @@ class AddBusinessScreen extends StatefulWidget {
 
 class _AddBusinessScreenState extends State<AddBusinessScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _userNameController = TextEditingController();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -26,6 +27,27 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
   double _uploadProgress = 0;
   String? _errorMessage;
   String? _successMessage;
+  String? _selectedCategory;
+
+  // WeDeshi business categories
+  final List<String> _categories = [
+    'Restaurant & Food',
+    'Fashion & Clothing',
+    'Beauty & Wellness',
+    'Electronics & Tech',
+    'Home & Garden',
+    'Automotive',
+    'Education & Training',
+    'Health & Medical',
+    'Professional Services',
+    'Entertainment & Events',
+    'Sports & Fitness',
+    'Travel & Tourism',
+    'Real Estate',
+    'Agriculture & Farming',
+    'Handicrafts & Art',
+    'Other',
+  ];
 
   // Image optimization settings
   static const int _maxImageWidth = 1920;
@@ -35,6 +57,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
 
   @override
   void dispose() {
+    _userNameController.dispose();
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
@@ -134,18 +157,27 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
 
       setState(() => _uploadProgress = 0.95);
 
+      // Use the username from the form
       final ad = BusinessAd(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
         imageUrls: imageUrls,
+        userName: _userNameController.text.trim(),
+        userId: _userNameController.text.trim().toLowerCase().replaceAll(
+          ' ',
+          '_',
+        ), // Use username as consistent userId
+        userProfileImage: null, // Optional profile image
+        createdAt: DateTime.now(),
       );
 
       await apiService.submitAd(ad);
 
       setState(() {
         _uploadProgress = 1.0;
-        _successMessage = 'Ad submitted successfully!';
+        _successMessage =
+            'Great! ${_userNameController.text.trim()}\'s business ad is now live!';
       });
 
       _showSuccessSnackbar(_successMessage!);
@@ -263,7 +295,10 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
           return Container(
             color: Colors.grey[100],
             child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+              ),
             ),
           );
         }
@@ -309,65 +344,72 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Custom theme to match the mockup
+    // WeDeshi theme with orange color scheme
     final customTheme = Theme.of(context).copyWith(
-      scaffoldBackgroundColor: Colors.white,
+      scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+      primaryColor: const Color(0xFFFF6B35),
       textTheme: Theme.of(context).textTheme.copyWith(
-            titleMedium: const TextStyle(
-              fontFamily: 'Montserrat',
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF333333),
-            ),
-            bodySmall: const TextStyle(
-              fontFamily: 'Montserrat',
-              fontSize: 12,
-              fontWeight: FontWeight.normal,
-              color: Color(0xFF4A4A4A),
-            ),
-            bodyMedium: const TextStyle(
-              fontFamily: 'Montserrat',
-              fontSize: 14,
-              fontWeight: FontWeight.normal,
-              color: Color(0xFF333333),
-            ),
-          ),
-      cardTheme: const CardThemeData(
-          color: Colors.white,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(16)),
-          ),
-          margin: EdgeInsets.zero,
+        titleMedium: const TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF333333),
         ),
+        bodySmall: const TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 12,
+          fontWeight: FontWeight.normal,
+          color: Color(0xFF666666),
+        ),
+        bodyMedium: const TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 14,
+          fontWeight: FontWeight.normal,
+          color: Color(0xFF333333),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 4,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+        margin: EdgeInsets.zero,
+        shadowColor: const Color(0xFFFF6B35).withOpacity(0.1),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFF5F5F5),
+        fillColor: Colors.white,
         labelStyle: const TextStyle(
           fontFamily: 'Montserrat',
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          color: Color(0xFF333333),
+          color: Color(0xFFFF6B35),
         ),
         hintStyle: const TextStyle(
           fontFamily: 'Montserrat',
           fontSize: 14,
-          color: Color(0xFFAAAAAA),
+          color: Color(0xFFBBBBBB),
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFCCCCCC)),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFFFA500)),
+          borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
         ),
-        prefixIconColor: const Color(0xFF333333),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+        ),
+        prefixIconColor: const Color(0xFFFF6B35),
         alignLabelWithHint: true,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
+          backgroundColor: const Color(0xFFFF6B35),
+          foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
@@ -378,12 +420,14 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),
+          elevation: 4,
+          shadowColor: const Color(0xFFFF6B35).withOpacity(0.3),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF333333),
-          side: const BorderSide(color: Color(0xFF333333)),
+          foregroundColor: const Color(0xFFFF6B35),
+          side: const BorderSide(color: Color(0xFFFF6B35)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
@@ -394,32 +438,32 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
           ),
         ),
       ),
-      dividerColor: const Color(0xFFCCCCCC),
+      dividerColor: const Color(0xFFE0E0E0),
     );
 
     return Theme(
       data: customTheme,
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
+          backgroundColor: const Color(0xFFFF6B35),
           elevation: 0,
           centerTitle: true,
-          iconTheme: const IconThemeData(color: Colors.black),
+          iconTheme: const IconThemeData(color: Colors.white),
           title: const Text(
-            'Submit an Ad',
+            'Create Business Ad',
             style: TextStyle(
               fontFamily: 'Montserrat',
-              fontSize: 24,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.black,
+              color: Colors.white,
             ),
           ),
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFFFA500), Colors.white],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFF6B35), Color(0xFFFF8A65)],
               ),
             ),
           ),
@@ -431,7 +475,10 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                   child: SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
                   ),
                 ),
               ),
@@ -445,7 +492,77 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Welcome Header
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFFF6B35), Color(0xFFFF8A65)],
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.business_center,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Create Your Business Ad',
+                            style: TextStyle(
+                              fontFamily: 'Montserrat',
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tell us who you are and showcase your business to thousands of customers on WeDeshi',
+                            style: TextStyle(
+                              fontFamily: 'Montserrat',
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.9),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                   // Form fields
+                  // Username field
+                  TextFormField(
+                    controller: _userNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Your Name *',
+                      hintText: 'Enter your name (will be displayed as poster)',
+                      prefixIcon: Icon(Icons.person),
+                      helperText:
+                          'This name will appear on all your business ads',
+                    ),
+                    validator: (value) {
+                      if (value?.trim().isEmpty ?? true) {
+                        return 'Your name is required';
+                      }
+                      if (value!.trim().length < 2) {
+                        return 'Name must be at least 2 characters';
+                      }
+                      return null;
+                    },
+                    textInputAction: TextInputAction.next,
+                    maxLength: 30,
+                  ),
+                  const SizedBox(height: 16),
+
                   TextFormField(
                     controller: _titleController,
                     decoration: const InputDecoration(
@@ -464,6 +581,49 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                     },
                     textInputAction: TextInputAction.next,
                     maxLength: 50,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Category Dropdown
+                  DropdownButtonFormField<String>(
+                    value: _selectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Business Category *',
+                      hintText: 'Select your business category',
+                      prefixIcon: Icon(Icons.category),
+                    ),
+                    items: _categories.map((String category) {
+                      return DropdownMenuItem<String>(
+                        value: category,
+                        child: Text(
+                          category,
+                          style: const TextStyle(
+                            fontFamily: 'Montserrat',
+                            fontSize: 14,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _selectedCategory = newValue;
+                      });
+                    },
+                    validator: (value) {
+                      if (value?.isEmpty ?? true) {
+                        return 'Please select a business category';
+                      }
+                      return null;
+                    },
+                    dropdownColor: Colors.white,
+                    style: const TextStyle(
+                      fontFamily: 'Montserrat',
+                      color: Color(0xFF333333),
+                    ),
+                    icon: const Icon(
+                      Icons.arrow_drop_down,
+                      color: Color(0xFFFF6B35),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -511,10 +671,17 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                             label: Text(
                               _selectedImages.isEmpty
                                   ? 'Select Images'
-                                  : 'Change Images',
+                                  : 'Change Images (${_selectedImages.length})',
                             ),
                             onPressed: _isSubmitting ? null : _pickImages,
-                            style: null,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFFF6B35),
+                              side: const BorderSide(color: Color(0xFFFF6B35)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
                           ),
 
                           const SizedBox(height: 12),
@@ -566,11 +733,11 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                               physics: const NeverScrollableScrollPhysics(),
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                                childAspectRatio: 1,
-                              ),
+                                    crossAxisCount: 3,
+                                    crossAxisSpacing: 8,
+                                    mainAxisSpacing: 8,
+                                    childAspectRatio: 1,
+                                  ),
                               itemCount: _selectedImages.length,
                               itemBuilder: (context, index) => Stack(
                                 fit: StackFit.expand,
@@ -623,13 +790,14 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                             ),
                             const SizedBox(height: 12),
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(8),
                               child: LinearProgressIndicator(
                                 value: _uploadProgress,
                                 minHeight: 8,
-                                valueColor:
-                                    const AlwaysStoppedAnimation(Colors.black),
-                                backgroundColor: const Color(0xFFF5F5F5),
+                                valueColor: const AlwaysStoppedAnimation(
+                                  Color(0xFFFF6B35),
+                                ),
+                                backgroundColor: const Color(0xFFF0F0F0),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -674,19 +842,23 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                   if (_successMessage != null && !_isSubmitting) ...[
                     const SizedBox(height: 16),
                     Card(
-                      color: Colors.green.shade50,
+                      color: const Color(0xFFE8F5E8),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
                           children: [
-                            const Icon(Icons.check_circle, color: Colors.green),
+                            const Icon(
+                              Icons.check_circle,
+                              color: Color(0xFF4CAF50),
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 _successMessage!,
                                 style: const TextStyle(
-                                  color: Colors.green,
+                                  color: Color(0xFF2E7D32),
                                   fontFamily: 'Montserrat',
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
@@ -700,10 +872,12 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                   ElevatedButton(
                     onPressed: _isSubmitting ? null : _submitAd,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: const Color(0xFFFF6B35),
                       foregroundColor: Colors.white,
                       minimumSize: const Size(double.infinity, 56),
-                      shape: const StadiumBorder(),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
                       padding: EdgeInsets.zero,
                       textStyle: const TextStyle(
                         fontFamily: 'Montserrat',
@@ -711,6 +885,8 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
+                      elevation: 6,
+                      shadowColor: const Color(0xFFFF6B35).withOpacity(0.4),
                     ),
                     child: _isSubmitting
                         ? const SizedBox(
@@ -721,7 +897,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Submit an Ad'),
+                        : const Text('Create Business Ad'),
                   ),
                   const SizedBox(height: 16),
                 ],

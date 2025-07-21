@@ -3,12 +3,20 @@ class BusinessAd {
   final String title;
   final String description;
   final List<String> imageUrls;
+  final String userName;
+  final String userId;
+  final String? userProfileImage;
+  final DateTime createdAt;
 
   BusinessAd({
     required this.id,
     required this.title,
     required this.description,
     required this.imageUrls,
+    required this.userName,
+    required this.userId,
+    this.userProfileImage,
+    required this.createdAt,
   });
 
   // Add fromJson if needed
@@ -18,6 +26,12 @@ class BusinessAd {
       title: json['title'],
       description: json['description'],
       imageUrls: List<String>.from(json['imageUrls']),
+      userName: json['userName'] ?? 'Unknown User',
+      userId: json['userId'] ?? '',
+      userProfileImage: json['userProfileImage'],
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
     );
   }
 
@@ -27,5 +41,9 @@ class BusinessAd {
     'title': title,
     'description': description,
     'imageUrls': imageUrls,
+    'userName': userName,
+    'userId': userId,
+    'userProfileImage': userProfileImage,
+    'createdAt': createdAt.toIso8601String(),
   };
 }
