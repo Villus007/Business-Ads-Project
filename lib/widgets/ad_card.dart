@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 import '../models/business_ad.dart';
@@ -7,8 +8,14 @@ import '../screens/ad_detail_screen.dart'; // Add this import
 class AdCard extends StatelessWidget {
   final BusinessAd ad;
   final bool isFeatured;
+  final VoidCallback? onLongPress;
 
-  const AdCard({super.key, required this.ad, this.isFeatured = false});
+  const AdCard({
+    super.key,
+    required this.ad,
+    this.isFeatured = false,
+    this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +24,13 @@ class AdCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _navigateToDetail(context),
+        onLongPress: () {
+          print('👆 LONG PRESS DETECTED! Ad: ${ad.title}');
+          HapticFeedback.mediumImpact();
+          if (onLongPress != null) {
+            onLongPress!();
+          }
+        },
         child: SizedBox(
           height: isFeatured ? 220 : 180, // Fixed height to prevent overflow
           child: Column(

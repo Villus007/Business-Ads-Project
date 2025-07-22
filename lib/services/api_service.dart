@@ -157,9 +157,12 @@ class ApiService extends ChangeNotifier {
   /// Get pre-signed URL from Lambda function
   Future<Map<String, String>> _getPresignedUploadUrl(String filename) async {
     try {
+      final contentType = _getContentType(filename);
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/presigned-url?filename=$filename'),
+            Uri.parse(
+              '$_baseUrl/presigned-url?filename=$filename&contentType=$contentType',
+            ),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -169,14 +172,28 @@ class ApiService extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
+        print('🔗 Presigned URL response: ${responseData.toString()}');
+
+        // Check if response contains required fields
+        if (responseData['uploadUrl'] == null) {
+          throw Exception('uploadUrl is null in presigned URL response');
+        }
+        if (responseData['cloudFrontUrl'] == null) {
+          throw Exception('cloudFrontUrl is null in presigned URL response');
+        }
+
         return {
           'uploadUrl': responseData['uploadUrl'] as String,
           'cloudFrontUrl': responseData['cloudFrontUrl'] as String,
         };
       } else {
+        print(
+          '❌ Presigned URL error: ${response.statusCode} - ${response.body}',
+        );
         throw Exception('Failed to get presigned URL: ${response.statusCode}');
       }
     } catch (e) {
+      print('❌ Presigned URL exception: ${e.toString()}');
       throw Exception('Failed to get presigned URL: ${e.toString()}');
     }
   }
@@ -269,11 +286,11 @@ class ApiService extends ChangeNotifier {
 
   /// Enhanced getFeaturedAds with better error handling
   Future<List<BusinessAd>> getFeaturedAds() async {
-    // Fetch from AWS
+    // Fetch from AWS with featured filter
     try {
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/ads'),
+            Uri.parse('$_baseUrl/ads?featured=true'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -286,10 +303,9 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> adsJson = responseData['ads'] ?? [];
         final List<BusinessAd> featuredAds = adsJson
             .map((adJson) => BusinessAd.fromJson(adJson))
-            .take(3) // Take only first 3 ads as featured
             .toList();
 
-        print('🌐 Fetched ${featuredAds.length} featured ads from AWS');
+        print('🌟 Fetched ${featuredAds.length} featured ads from AWS');
         return featuredAds;
       } else {
         throw Exception(
@@ -298,6 +314,72 @@ class ApiService extends ChangeNotifier {
       }
     } catch (e) {
       print('❌ Error fetching featured ads: $e');
+      return [];
+    }
+  }
+
+  /// Get ads by specific user
+  Future<List<BusinessAd>> getAdsByUser(String userId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/ads?userId=$userId'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final List<dynamic> adsJson = responseData['ads'] ?? [];
+        final List<BusinessAd> userAds = adsJson
+            .map((adJson) => BusinessAd.fromJson(adJson))
+            .toList();
+
+        print('👤 Fetched ${userAds.length} ads for user: $userId');
+        return userAds;
+      } else {
+        throw Exception(
+          'Failed to fetch user ads: HTTP ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      print('❌ Error fetching user ads: $e');
+      return [];
+    }
+  }
+
+  /// Get ads by username
+  Future<List<BusinessAd>> getAdsByUserName(String userName) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/ads?userName=$userName'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final List<dynamic> adsJson = responseData['ads'] ?? [];
+        final List<BusinessAd> userAds = adsJson
+            .map((adJson) => BusinessAd.fromJson(adJson))
+            .toList();
+
+        print('👤 Fetched ${userAds.length} ads for user: $userName');
+        return userAds;
+      } else {
+        throw Exception(
+          'Failed to fetch user ads: HTTP ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      print('❌ Error fetching user ads: $e');
       return [];
     }
   }
@@ -407,16 +489,18 @@ class ApiService extends ChangeNotifier {
         print('✅ Ad deleted from local storage');
         return true;
       } else {
-        // In production mode, send delete request as POST with delete action
-        // Since your API Gateway doesn't support DELETE method, we'll use POST with action
+        // In production mode, send proper DELETE request to root endpoint
         final response = await http
-            .post(
+            .delete(
               Uri.parse('$_baseUrl/'),
               headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
               },
-              body: json.encode({'action': 'delete', 'adId': adId}),
+              body: json.encode({
+                'id': adId,
+                'hard': false, // Use soft delete by default
+              }),
             )
             .timeout(const Duration(seconds: 30));
 

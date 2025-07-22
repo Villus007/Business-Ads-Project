@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/business_ad.dart';
 import '../services/api_service.dart';
@@ -76,6 +77,131 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
       return '${difference.inMinutes}m ago';
     } else {
       return 'Just now';
+    }
+  }
+
+  void _showDeleteConfirmationDialog(BusinessAd ad) {
+    print('📱 Showing delete dialog for ad: ${ad.title} (ID: ${ad.id})');
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.delete_outline, color: Colors.red[700]),
+              const SizedBox(width: 8),
+              const Text('Delete Post'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Are you sure you want to delete "${ad.title}"?'),
+              const SizedBox(height: 8),
+              const Text(
+                'This action cannot be undone.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Ad ID: ${ad.id}',
+                style: const TextStyle(color: Colors.grey, fontSize: 10),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                print('❌ Delete cancelled by user');
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                print('🗑️ Delete confirmed by user for ad: ${ad.id}');
+                Navigator.of(context).pop(); // Close dialog
+                await _deleteAd(ad);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteAd(BusinessAd ad) async {
+    print('🗑️ Starting delete process for ad: ${ad.id}');
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+        ),
+      ),
+    );
+
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      print('🌐 Calling API service to delete ad: ${ad.id}');
+
+      final success = await apiService.deleteBusinessAd(ad.id);
+      print('📡 Delete API response: $success');
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (success) {
+        print('✅ Delete successful, showing success message');
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Post "${ad.title}" deleted successfully'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Reload data
+        print('🔄 Reloading data after successful delete');
+        _loadData();
+      } else {
+        print('❌ Delete failed according to API service');
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete "${ad.title}"'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('💥 Exception during delete: $e');
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting post: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -261,7 +387,11 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
               ? null
               : Border.all(color: const Color(0xFFFF6B35).withOpacity(0.3)),
         ),
-        child: AdCard(ad: ad, isFeatured: isFeatured),
+        child: AdCard(
+          ad: ad,
+          isFeatured: isFeatured,
+          onLongPress: () => _showDeleteConfirmationDialog(ad),
+        ),
       ),
     );
   }
@@ -270,116 +400,138 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFFF6B35).withOpacity(0.3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // User info header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: GestureDetector(
-                onTap: () => _openUserProfile(ad.userId, ad.userName),
+      child: InkWell(
+        onLongPress: () {
+          print('👆 LONG PRESS DETECTED on full width card! Ad: ${ad.title}');
+          HapticFeedback.mediumImpact();
+          _showDeleteConfirmationDialog(ad);
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFFF6B35).withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User info header
+              Padding(
+                padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    // User profile image
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: const Color(0xFFFF6B35),
-                      backgroundImage: ad.userProfileImage != null
-                          ? NetworkImage(ad.userProfileImage!)
-                          : null,
-                      child: ad.userProfileImage == null
-                          ? Text(
-                              ad.userName.isNotEmpty
-                                  ? ad.userName[0].toUpperCase()
-                                  : 'U',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    // User name and time
+                    // User profile section
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            ad.userName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF333333),
+                      child: GestureDetector(
+                        onTap: () => _openUserProfile(ad.userId, ad.userName),
+                        child: Row(
+                          children: [
+                            // User profile image
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor: const Color(0xFFFF6B35),
+                              backgroundImage: ad.userProfileImage != null
+                                  ? NetworkImage(ad.userProfileImage!)
+                                  : null,
+                              child: ad.userProfileImage == null
+                                  ? Text(
+                                      ad.userName.isNotEmpty
+                                          ? ad.userName[0].toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                          ),
-                          Text(
-                            _getTimeAgo(ad.createdAt),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
+                            const SizedBox(width: 12),
+                            // User name and time
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    ad.userName,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF333333),
+                                    ),
+                                  ),
+                                  Text(
+                                    _getTimeAgo(ad.createdAt),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                    ),
+                    // Delete button
+                    IconButton(
+                      onPressed: () => _showDeleteConfirmationDialog(ad),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      tooltip: 'Delete Post',
+                      splashRadius: 20,
                     ),
                   ],
                 ),
               ),
-            ),
 
-            // Image section with full visibility
-            if (ad.imageUrls.isNotEmpty)
-              GestureDetector(
-                onTap: () => _openImageDetailView(ad),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(16),
-                    right: Radius.circular(16),
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    height: 200, // Fixed height for consistent layout
-                    child: Image.network(
-                      ad.imageUrls.first,
-                      fit: BoxFit.contain, // Show full image without cropping
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[200],
-                        child: const Center(
-                          child: Icon(
-                            Icons.business,
-                            size: 50,
-                            color: Colors.grey,
+              // Image section with full visibility
+              if (ad.imageUrls.isNotEmpty)
+                GestureDetector(
+                  onTap: () => _openImageDetailView(ad),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(16),
+                      right: Radius.circular(16),
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 200, // Fixed height for consistent layout
+                      child: Image.network(
+                        ad.imageUrls.first,
+                        fit: BoxFit.contain, // Show full image without cropping
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: Icon(
+                              Icons.business,
+                              size: 50,
+                              color: Colors.grey,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-            // Content section
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                ad.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFFF6B35),
+              // Content section
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  ad.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFF6B35),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1154,6 +1306,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           );
                         },
                         onLongPress: () {
+                          print(
+                            '🔍 Long press detected on ad: ${ad.title} (ID: ${ad.id})',
+                          );
+                          // Add haptic feedback to confirm long press is working
+                          HapticFeedback.mediumImpact();
                           _showDeleteConfirmationDialog(ad);
                         },
                         child: Card(
@@ -1170,7 +1327,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   borderRadius: const BorderRadius.vertical(
                                     top: Radius.circular(16),
                                   ),
-                                  child: Container(
+                                  child: SizedBox(
                                     width: double.infinity,
                                     child: ad.imageUrls.isNotEmpty
                                         ? Image.network(
@@ -1232,6 +1389,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   void _showDeleteConfirmationDialog(BusinessAd ad) {
+    print('📱 Showing delete dialog for ad: ${ad.title} (ID: ${ad.id})');
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -1253,15 +1412,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 'This action cannot be undone.',
                 style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Ad ID: ${ad.id}',
+                style: const TextStyle(color: Colors.grey, fontSize: 10),
+              ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                print('❌ Delete cancelled by user');
+                Navigator.of(context).pop();
+              },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
+                print('🗑️ Delete confirmed by user for ad: ${ad.id}');
                 Navigator.of(context).pop(); // Close dialog
                 await _deleteAd(ad);
               },
@@ -1278,6 +1446,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Future<void> _deleteAd(BusinessAd ad) async {
+    print('🗑️ Starting delete process for ad: ${ad.id}');
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -1291,12 +1461,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
+      print('🌐 Calling API service to delete ad: ${ad.id}');
+
       final success = await apiService.deleteBusinessAd(ad.id);
+      print('📡 Delete API response: $success');
 
       // Close loading dialog
       Navigator.of(context).pop();
 
       if (success) {
+        print('✅ Delete successful, showing success message');
+
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1307,8 +1482,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         );
 
         // Reload user ads
+        print('🔄 Reloading user ads after successful delete');
         _loadUserAds();
       } else {
+        print('❌ Delete failed according to API service');
+
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1319,6 +1497,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         );
       }
     } catch (e) {
+      print('💥 Exception during delete: $e');
+
       // Close loading dialog
       Navigator.of(context).pop();
 

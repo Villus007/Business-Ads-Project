@@ -7,6 +7,12 @@ class BusinessAd {
   final String userId;
   final String? userProfileImage;
   final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String status;
+  final int likes;
+  final int viewCount;
+  final List<dynamic> comments;
+  final bool featured;
 
   BusinessAd({
     required this.id,
@@ -17,6 +23,12 @@ class BusinessAd {
     required this.userId,
     this.userProfileImage,
     required this.createdAt,
+    this.updatedAt,
+    this.status = 'active',
+    this.likes = 0,
+    this.viewCount = 0,
+    this.comments = const [],
+    this.featured = false,
   });
 
   // Add fromJson if needed
@@ -32,6 +44,14 @@ class BusinessAd {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : null,
+      status: json['status'] ?? 'active',
+      likes: (json['likes'] ?? 0).toInt(),
+      viewCount: (json['viewCount'] ?? 0).toInt(),
+      comments: json['comments'] ?? [],
+      featured: json['featured'] ?? false,
     );
   }
 
@@ -45,5 +65,11 @@ class BusinessAd {
     'userId': userId,
     'userProfileImage': userProfileImage,
     'createdAt': createdAt.toIso8601String(),
+    if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+    'status': status,
+    'likes': likes,
+    'viewCount': viewCount,
+    'comments': comments,
+    'featured': featured,
   };
 }
