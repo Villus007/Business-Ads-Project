@@ -24,9 +24,11 @@ This is a cross-platform Flutter application that allows users to:
 
 - **✅ Complete AWS Integration**: Full backend integration with AWS services
 - **✅ Image Upload Pipeline**: Secure image upload using pre-signed URLs → S3 → CloudFront
-- **✅ Delete System**: Soft/hard delete with S3 cleanup and real-time UI updates
+- **✅ Interactive Like System**: Heart-based like functionality with real-time updates
+- **✅ Modern Social Media UI**: WeDeshi-inspired design with user avatars and engagement
+- **✅ Delete System**: Long-press delete with confirmation dialogs and real-time UI updates
 - **✅ Cross-Platform**: Supports Android, iOS, Web, Windows, macOS, and Linux
-- **✅ Modern UI**: Clean and intuitive user interface with long-press delete
+- **✅ Social Media Features**: User profiles, like counts, view tracking, and timestamps
 - **✅ Real-time Data**: Fetches and displays ads from AWS with live updates
 - **✅ Data Type Compatibility**: Fixed Flutter-AWS data type conversion issues
 
@@ -47,11 +49,26 @@ This is a cross-platform Flutter application that allows users to:
 4. Stored in DynamoDB with user information
 5. Immediately appears in feed
 
+### ✅ Social Media UI System  
+1. WeDeshi-inspired card design with user avatars
+2. Heart-based like system with animated interactions
+3. User profile display with timestamps ("Just now")
+4. Large image display with proper aspect ratios
+5. Interactive engagement buttons and view counters
+
 ### ✅ Post Display System  
 1. Fetches posts from AWS DynamoDB
-2. Displays with proper image loading from CloudFront
-3. Handles data type conversion (Decimal → int)
-4. Real-time updates and refresh
+2. Social media feed layout with full-width cards
+3. User information header with profile avatars
+4. Handles data type conversion (Decimal → int)
+5. Real-time updates and refresh
+
+### ✅ Like & Engagement System
+1. Heart icon with like/unlike functionality
+2. Real-time like count updates with haptic feedback
+3. Visual state changes (red heart when liked)
+4. View count tracking and display
+5. Featured badge system for quality posts
 
 ### ✅ Delete Functionality
 1. Long-press detection on posts

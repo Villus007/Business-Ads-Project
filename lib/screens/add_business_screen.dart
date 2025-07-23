@@ -661,7 +661,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Select up to 10 images (max 5MB each)',
+                            'Select up to 10 images (max 5MB each). Multiple images will automatically slide in your ad post!',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                           const SizedBox(height: 16),

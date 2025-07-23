@@ -45,41 +45,6 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
     }
   }
 
-  void _openImageDetailView(BusinessAd ad) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ImageDetailScreen(
-          ad: ad,
-          allAds: [], // We'll populate this with all ads from the same business
-        ),
-      ),
-    );
-  }
-
-  void _openUserProfile(String userId, String userName) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) =>
-            UserProfileScreen(userId: userId, userName: userName),
-      ),
-    );
-  }
-
-  String _getTimeAgo(DateTime createdAt) {
-    final now = DateTime.now();
-    final difference = now.difference(createdAt);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
-
   void _showDeleteConfirmationDialog(BusinessAd ad) {
     print('📱 Showing delete dialog for ad: ${ad.title} (ID: ${ad.id})');
 
@@ -369,171 +334,18 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
   }
 
   Widget _buildStyledAdCard(BusinessAd ad, {bool isFeatured = false}) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: isFeatured
-              ? const LinearGradient(
-                  colors: [Color(0xFFFF6B35), Color(0xFFFF8A65)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : null,
-          color: isFeatured ? null : Colors.white,
-          border: isFeatured
-              ? null
-              : Border.all(color: const Color(0xFFFF6B35).withOpacity(0.3)),
-        ),
-        child: AdCard(
-          ad: ad,
-          isFeatured: isFeatured,
-          onLongPress: () => _showDeleteConfirmationDialog(ad),
-        ),
-      ),
+    return AdCard(
+      ad: ad,
+      isFeatured: isFeatured,
+      onLongPress: () => _showDeleteConfirmationDialog(ad),
     );
   }
 
   Widget _buildFullWidthAdCard(BusinessAd ad) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onLongPress: () {
-          print('👆 LONG PRESS DETECTED on full width card! Ad: ${ad.title}');
-          HapticFeedback.mediumImpact();
-          _showDeleteConfirmationDialog(ad);
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Colors.white,
-            border: Border.all(color: const Color(0xFFFF6B35).withOpacity(0.3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User info header
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    // User profile section
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _openUserProfile(ad.userId, ad.userName),
-                        child: Row(
-                          children: [
-                            // User profile image
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: const Color(0xFFFF6B35),
-                              backgroundImage: ad.userProfileImage != null
-                                  ? NetworkImage(ad.userProfileImage!)
-                                  : null,
-                              child: ad.userProfileImage == null
-                                  ? Text(
-                                      ad.userName.isNotEmpty
-                                          ? ad.userName[0].toUpperCase()
-                                          : 'U',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 12),
-                            // User name and time
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    ad.userName,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF333333),
-                                    ),
-                                  ),
-                                  Text(
-                                    _getTimeAgo(ad.createdAt),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Delete button
-                    IconButton(
-                      onPressed: () => _showDeleteConfirmationDialog(ad),
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      tooltip: 'Delete Post',
-                      splashRadius: 20,
-                    ),
-                  ],
-                ),
-              ),
-
-              // Image section with full visibility
-              if (ad.imageUrls.isNotEmpty)
-                GestureDetector(
-                  onTap: () => _openImageDetailView(ad),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(16),
-                      right: Radius.circular(16),
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 200, // Fixed height for consistent layout
-                      child: Image.network(
-                        ad.imageUrls.first,
-                        fit: BoxFit.contain, // Show full image without cropping
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: Colors.grey[200],
-                          child: const Center(
-                            child: Icon(
-                              Icons.business,
-                              size: 50,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-              // Content section
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  ad.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFFF6B35),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return AdCard(
+      ad: ad,
+      isFeatured: false,
+      onLongPress: () => _showDeleteConfirmationDialog(ad),
     );
   }
 
@@ -718,22 +530,29 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                             itemCount: currentAd.imageUrls.length,
                             itemBuilder: (context, imageIndex) {
                               return InteractiveViewer(
-                                child: Center(
-                                  child: Image.network(
-                                    currentAd.imageUrls[imageIndex],
-                                    fit: BoxFit.contain,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            Container(
-                                              color: Colors.grey[800],
-                                              child: const Center(
-                                                child: Icon(
-                                                  Icons.business,
-                                                  color: Colors.white,
-                                                  size: 50,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  color: Colors.black,
+                                  child: Center(
+                                    child: Image.network(
+                                      currentAd.imageUrls[imageIndex],
+                                      fit: BoxFit.contain,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
+                                                color: Colors.grey[800],
+                                                child: const Center(
+                                                  child: Icon(
+                                                    Icons.business,
+                                                    color: Colors.white,
+                                                    size: 50,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
+                                    ),
                                   ),
                                 ),
                               );
@@ -742,14 +561,22 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
 
                           // Description overlay
                           Positioned(
-                            left: 16,
-                            bottom: 80,
+                            left: 12,
+                            right: 12,
+                            bottom: 40,
                             child: Container(
-                              width: MediaQuery.of(context).size.width * 0.4,
-                              padding: const EdgeInsets.all(16),
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(12),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withOpacity(0.8),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -759,54 +586,25 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                                     currentAd.title,
                                     style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 18,
+                                      fontSize: 26,
                                       fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 16),
                                   Text(
                                     currentAd.description,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                      height: 1.4,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 18,
+                                      height: 1.5,
+                                      letterSpacing: 0.3,
                                     ),
-                                    maxLines: 4,
+                                    maxLines: 8,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
-                            ),
-                          ),
-
-                          // Instagram-style action buttons on the right
-                          Positioned(
-                            right: 16,
-                            bottom: 100,
-                            child: Column(
-                              children: [
-                                _buildActionButton(
-                                  Icons.favorite_border,
-                                  () => debugPrint('Like: ${currentAd.title}'),
-                                ),
-                                const SizedBox(height: 16),
-                                _buildActionButton(
-                                  Icons.chat_bubble_outline,
-                                  () =>
-                                      debugPrint('Comment: ${currentAd.title}'),
-                                ),
-                                const SizedBox(height: 16),
-                                _buildActionButton(
-                                  Icons.share,
-                                  () => debugPrint('Share: ${currentAd.title}'),
-                                ),
-                                const SizedBox(height: 16),
-                                _buildActionButton(
-                                  Icons.phone,
-                                  () =>
-                                      debugPrint('Contact: ${currentAd.title}'),
-                                ),
-                              ],
                             ),
                           ),
 
@@ -931,22 +729,29 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                               itemCount: currentAd.imageUrls.length,
                               itemBuilder: (context, imageIndex) {
                                 return InteractiveViewer(
-                                  child: Center(
-                                    child: Image.network(
-                                      currentAd.imageUrls[imageIndex],
-                                      fit: BoxFit.contain,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                                color: Colors.grey[800],
-                                                child: const Center(
-                                                  child: Icon(
-                                                    Icons.business,
-                                                    color: Colors.white,
-                                                    size: 50,
+                                  child: Container(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    color: Colors.black,
+                                    child: Center(
+                                      child: Image.network(
+                                        currentAd.imageUrls[imageIndex],
+                                        fit: BoxFit.contain,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Container(
+                                                  color: Colors.grey[800],
+                                                  child: const Center(
+                                                    child: Icon(
+                                                      Icons.business,
+                                                      color: Colors.white,
+                                                      size: 50,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
+                                      ),
                                     ),
                                   ),
                                 );
@@ -955,14 +760,22 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
 
                             // Description overlay
                             Positioned(
-                              left: 16,
-                              bottom: 80,
+                              left: 12,
+                              right: 12,
+                              bottom: 40,
                               child: Container(
-                                width: MediaQuery.of(context).size.width * 0.4,
-                                padding: const EdgeInsets.all(16),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(24),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(12),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.black.withOpacity(0.8),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -972,58 +785,25 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                                       currentAd.title,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 18,
+                                        fontSize: 26,
                                         fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 16),
                                     Text(
                                       currentAd.description,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                        height: 1.4,
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontSize: 18,
+                                        height: 1.5,
+                                        letterSpacing: 0.3,
                                       ),
-                                      maxLines: 4,
+                                      maxLines: 8,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-
-                            // Instagram-style action buttons on the right
-                            Positioned(
-                              right: 16,
-                              bottom: 100,
-                              child: Column(
-                                children: [
-                                  _buildActionButton(
-                                    Icons.favorite_border,
-                                    () =>
-                                        debugPrint('Like: ${currentAd.title}'),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildActionButton(
-                                    Icons.chat_bubble_outline,
-                                    () => debugPrint(
-                                      'Comment: ${currentAd.title}',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildActionButton(
-                                    Icons.share,
-                                    () =>
-                                        debugPrint('Share: ${currentAd.title}'),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildActionButton(
-                                    Icons.phone,
-                                    () => debugPrint(
-                                      'Contact: ${currentAd.title}',
-                                    ),
-                                  ),
-                                ],
                               ),
                             ),
 
@@ -1091,22 +871,6 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             },
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildActionButton(IconData icon, VoidCallback onPressed) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        shape: BoxShape.circle,
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white, size: 20),
-        onPressed: onPressed,
-        padding: EdgeInsets.zero,
       ),
     );
   }

@@ -50,7 +50,8 @@ class ApiService extends ChangeNotifier {
       };
     }
 
-    print('📝 Pre-populated ${knownUsers.length} known usernames in cache');
+    // Debug: Uncomment for cache debugging if needed
+    // print('📝 Pre-populated ${knownUsers.length} known usernames in cache');
   }
 
   /// Primary image upload method using pre-signed URL strategy (recommended)
@@ -405,27 +406,23 @@ class ApiService extends ChangeNotifier {
           // Create ad from server data
           BusinessAd ad = BusinessAd.fromJson(adJson);
 
-          print(
-            '🔍 Processing ad: ${ad.title} - Username: "${ad.userName}" - ID: ${ad.id}',
-          );
+          // Debug: Uncomment for ad processing debugging if needed
+          // print('🔍 Processing ad: ${ad.title} - Username: "${ad.userName}" - ID: ${ad.id}');
 
           // Merge with cached user info if available (try by ID first, then by username)
           Map<String, dynamic>? cachedInfo;
 
           if (_userInfoCache.containsKey(ad.id)) {
             cachedInfo = _userInfoCache[ad.id];
-            print('💰 Found cached info by ID for: ${ad.id}');
+            // Debug: print('💰 Found cached info by ID for: ${ad.id}');
           } else if (_userInfoByName.containsKey(ad.userName.toLowerCase())) {
             // Try username lookup for any ad that has a username (including server-returned usernames)
             cachedInfo = _userInfoByName[ad.userName.toLowerCase()];
-            print('👤 Found cached info by username for: "${ad.userName}"');
+            // Debug: print('👤 Found cached info by username for: "${ad.userName}"');
           } else {
-            print(
-              '❌ No cached info found for: "${ad.userName}" (ID: ${ad.id})',
-            );
-            print(
-              '📋 Available usernames in cache: ${_userInfoByName.keys.toList()}',
-            );
+            // Debug: Uncomment for cache debugging if needed
+            // print('❌ No cached info found for: "${ad.userName}" (ID: ${ad.id})');
+            // print('📋 Available usernames in cache: ${_userInfoByName.keys.toList()}');
           }
 
           if (cachedInfo != null) {
@@ -451,7 +448,7 @@ class ApiService extends ChangeNotifier {
         }).toList();
 
         print('🌐 Fetched ${ads.length} ads from AWS');
-        print('💾 Active cache entries: ${_userInfoCache.length}');
+        // Debug: print('💾 Active cache entries: ${_userInfoCache.length}');
         return ads;
       } else {
         throw Exception('Failed to fetch ads: HTTP ${response.statusCode}');
