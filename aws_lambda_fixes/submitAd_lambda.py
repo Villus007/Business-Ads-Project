@@ -1,14 +1,13 @@
 import json
 import boto3
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
-import re
 
 def lambda_handler(event, context):
     """
-    Enhanced submitAd Lambda Function - Version 2.0
-    Creates business ads in DynamoDB with full user support system
+    Enhanced submitAd Lambda Function with TTL Support - Version 2.2
+    Creates business ads in DynamoDB with 30-day automatic expiration
     """
     
     # Initialize DynamoDB
@@ -17,6 +16,7 @@ def lambda_handler(event, context):
     
     # Configuration
     CLOUDFRONT_DOMAIN = 'd11c102y3uxwr7.cloudfront.net'
+    TTL_DAYS = 30  # Time to live in days
     
     try:
         # Parse request body
@@ -109,10 +109,18 @@ def lambda_handler(event, context):
         
         print(f"📊 Quality score: {quality_score}/7, Featured: {is_featured}")
         
-        # Create timestamp
-        current_time = datetime.utcnow().isoformat()
+        # Create timestamps
+        current_time = datetime.utcnow()
+        current_time_iso = current_time.isoformat()
         
-        # Build the ad item
+        # Calculate TTL expiration date (30 days from now)
+        expiration_date = current_time + timedelta(days=TTL_DAYS)
+        expiration_timestamp = int(expiration_date.timestamp())  # Unix timestamp for DynamoDB TTL
+        expiration_iso = expiration_date.isoformat()
+        
+        print(f"⏰ Ad will expire on: {expiration_iso} (TTL: {expiration_timestamp})")
+        
+        # Build the ad item with TTL support
         ad_item = {
             'id': ad_id,
             'title': body['title'],
@@ -120,8 +128,10 @@ def lambda_handler(event, context):
             'imageUrls': normalized_urls,
             'userName': user_name,
             'userId': user_id,
-            'createdAt': current_time,
-            'updatedAt': current_time,
+            'createdAt': current_time_iso,
+            'updatedAt': current_time_iso,
+            'expiresAt': expiration_iso,  # Human-readable expiration
+            'ttl': expiration_timestamp,  # DynamoDB TTL attribute (Unix timestamp)
             'status': 'active',
             'featured': is_featured,
             'imageCount': image_count,
@@ -136,14 +146,15 @@ def lambda_handler(event, context):
             if body.get(field):
                 ad_item[field] = body[field]
         
-        print(f"💾 Saving ad item: {json.dumps(ad_item, default=str)}")
+        print(f"💾 Saving ad item with TTL: {json.dumps(ad_item, default=str)}")
         
         # Save to DynamoDB
         table.put_item(Item=ad_item)
         
         print(f"✅ Ad created successfully: {ad_id}")
+        print(f"⏰ Automatic deletion scheduled for: {expiration_iso}")
         
-        # Return success response
+        # Return success response with TTL information
         return {
             'statusCode': 200,
             'headers': {
@@ -154,31 +165,15 @@ def lambda_handler(event, context):
             },
             'body': json.dumps({
                 'success': True,
-                'message': 'Ad created successfully with user information',
+                'message': f'Ad created successfully with {TTL_DAYS}-day automatic expiration',
                 'adId': ad_id,
                 'featured': is_featured,
                 'userName': user_name,
                 'userId': user_id,
                 'imageCount': image_count,
-                'qualityScore': quality_score,
-                'createdAt': current_time
-            })
-        }
-        
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON decode error: {str(e)}")
-        return {
-            'statusCode': 400,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'success': False,
-                'error': f'Invalid JSON: {str(e)}',
-                'timestamp': datetime.utcnow().isoformat()
+                'createdAt': current_time_iso,
+                'expiresAt': expiration_iso,
+                'ttlDays': TTL_DAYS
             })
         }
         
