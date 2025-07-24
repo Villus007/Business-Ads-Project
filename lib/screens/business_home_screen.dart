@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import 'dart:async';
 import '../models/business_ad.dart';
 import '../services/api_service.dart';
 import '../widgets/ad_card.dart';
@@ -423,17 +426,198 @@ class ImageDetailScreen extends StatefulWidget {
 class _ImageDetailScreenState extends State<ImageDetailScreen> {
   late PageController _pageController;
   int _currentImageIndex = 0;
+  
+  // Video player controllers
+  Map<String, VideoPlayerController> _videoControllers = {};
+  Map<String, ChewieController> _chewieControllers = {};
+  Map<String, bool> _videoInitialized = {};
+  
+  // Track if any video is currently playing
+  bool _isVideoPlaying = false;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _initializeVideoControllers();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    
+    // Dispose video controllers
+    for (var controller in _videoControllers.values) {
+      controller.dispose();
+    }
+    for (var controller in _chewieControllers.values) {
+      controller.dispose();
+    }
+    
     super.dispose();
+  }
+
+  void _initializeVideoControllers() async {
+    print('🎥 Initializing videos for ad: ${widget.ad.id}');
+    print('🎥 Video URLs: ${widget.ad.videoUrls}');
+    
+    for (int i = 0; i < widget.ad.videoUrls.length; i++) {
+      final videoUrl = widget.ad.videoUrls[i];
+      final controllerKey = '${widget.ad.id}_video_$i';
+      
+      try {
+        print('🎥 Initializing video $i: $videoUrl');
+        
+        final videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+        await videoController.initialize();
+        
+        print('✅ Video $i initialized successfully: $videoUrl');
+        
+        if (mounted) {
+          setState(() {
+            _videoControllers[controllerKey] = videoController;
+            _videoInitialized[controllerKey] = true;
+            _chewieControllers[controllerKey] = ChewieController(
+              videoPlayerController: videoController,
+              autoPlay: false,
+              looping: true,
+              aspectRatio: videoController.value.aspectRatio,
+              allowFullScreen: true,
+              allowMuting: true,
+              showControls: true,
+              placeholder: Container(
+                color: Colors.black,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ),
+            );
+          });
+        }
+      } catch (error) {
+        print('❌ Error initializing video controller for $videoUrl: $error');
+        if (mounted) {
+          setState(() {
+            _videoInitialized[controllerKey] = false;
+          });
+        }
+      }
+    }
+  }
+
+  // Get combined media list (images + videos)
+  List<Map<String, dynamic>> get _combinedMedia {
+    List<Map<String, dynamic>> media = [];
+    
+    print('🖼️ Processing images: ${widget.ad.imageUrls.length}');
+    print('🎥 Processing videos: ${widget.ad.videoUrls.length}');
+    
+    // Add images
+    for (int i = 0; i < widget.ad.imageUrls.length; i++) {
+      media.add({
+        'type': 'image',
+        'url': widget.ad.imageUrls[i],
+        'index': i,
+      });
+      print('🖼️ Added image $i: ${widget.ad.imageUrls[i]}');
+    }
+    
+    // Add videos
+    for (int i = 0; i < widget.ad.videoUrls.length; i++) {
+      media.add({
+        'type': 'video',
+        'url': widget.ad.videoUrls[i],
+        'index': i,
+      });
+      print('🎥 Added video $i: ${widget.ad.videoUrls[i]}');
+    }
+    
+    print('📊 Total combined media: ${media.length}');
+    return media;
+  }
+
+  Widget _buildImageWidget(String imageUrl) {
+    return InteractiveViewer(
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.black,
+        child: Center(
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.contain,
+            width: double.infinity,
+            height: double.infinity,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Colors.grey[800],
+              child: const Center(
+                child: Icon(
+                  Icons.business,
+                  color: Colors.white,
+                  size: 50,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoWidget(String videoUrl, String controllerKey) {
+    print('🎬 Building video widget for: $videoUrl with key: $controllerKey');
+    print('🎬 Video initialized: ${_videoInitialized[controllerKey]}');
+    print('🎬 Chewie controller exists: ${_chewieControllers.containsKey(controllerKey)}');
+    
+    // Check if video is initialized
+    if (!_videoInitialized.containsKey(controllerKey) || !_videoInitialized[controllerKey]!) {
+      print('⏳ Video not yet initialized, showing loading...');
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text(
+                'Loading video...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final chewieController = _chewieControllers[controllerKey];
+    if (chewieController == null) {
+      print('❌ Chewie controller is null for key: $controllerKey');
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error, color: Colors.white, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'Video failed to load',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    print('✅ Rendering video with Chewie controller');
+    return Container(
+      color: Colors.black,
+      child: Chewie(controller: chewieController),
+    );
   }
 
   @override
@@ -493,12 +677,12 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           ),
         ),
         actions: [
-          if (widget.ad.imageUrls.length > 1)
+          if (_combinedMedia.length > 1)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(
                 child: Text(
-                  '${_currentImageIndex + 1}/${widget.ad.imageUrls.length}',
+                  '${_currentImageIndex + 1}/${_combinedMedia.length}',
                   style: const TextStyle(color: Colors.white),
                 ),
               ),
@@ -526,7 +710,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                     Expanded(
                       child: Stack(
                         children: [
-                          // Image PageView for multiple images
+                          // Combined Media PageView for images and videos
                           PageView.builder(
                             onPageChanged: (imageIndex) {
                               if (pageIndex == 0) {
@@ -536,35 +720,46 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                                 });
                               }
                             },
-                            itemCount: currentAd.imageUrls.length,
+                            itemCount: pageIndex == 0 ? _combinedMedia.length : currentAd.imageUrls.length,
                             itemBuilder: (context, imageIndex) {
-                              return InteractiveViewer(
-                                child: Container(
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  color: Colors.black,
-                                  child: Center(
-                                    child: Image.network(
-                                      currentAd.imageUrls[imageIndex],
-                                      fit: BoxFit.contain,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                                color: Colors.grey[800],
-                                                child: const Center(
-                                                  child: Icon(
-                                                    Icons.business,
-                                                    color: Colors.white,
-                                                    size: 50,
+                              if (pageIndex == 0) {
+                                // For current ad, use combined media
+                                final media = _combinedMedia[imageIndex];
+                                if (media['type'] == 'image') {
+                                  return _buildImageWidget(media['url']);
+                                } else {
+                                  return _buildVideoWidget(media['url'], '${widget.ad.id}_video_${media['index']}');
+                                }
+                              } else {
+                                // For other ads, use only images (keeping original behavior)
+                                return InteractiveViewer(
+                                  child: Container(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    color: Colors.black,
+                                    child: Center(
+                                      child: Image.network(
+                                        currentAd.imageUrls[imageIndex],
+                                        fit: BoxFit.contain,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Container(
+                                                  color: Colors.grey[800],
+                                                  child: const Center(
+                                                    child: Icon(
+                                                      Icons.business,
+                                                      color: Colors.white,
+                                                      size: 50,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
+                                );
+                              }
                             },
                           ),
 
@@ -618,7 +813,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                           ),
 
                           // Page indicators for images
-                          if (currentAd.imageUrls.length > 1)
+                          if ((pageIndex == 0 ? _combinedMedia.length : currentAd.imageUrls.length) > 1)
                             Positioned(
                               bottom: 20,
                               left: 0,
@@ -626,7 +821,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: List.generate(
-                                  currentAd.imageUrls.length,
+                                  pageIndex == 0 ? _combinedMedia.length : currentAd.imageUrls.length,
                                   (index) => Container(
                                     margin: const EdgeInsets.symmetric(
                                       horizontal: 4,
@@ -725,7 +920,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                       Expanded(
                         child: Stack(
                           children: [
-                            // Image PageView for multiple images
+                            // Combined Media PageView for images and videos
                             PageView.builder(
                               onPageChanged: (imageIndex) {
                                 if (pageIndex == 0) {
@@ -735,35 +930,46 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                                   });
                                 }
                               },
-                              itemCount: currentAd.imageUrls.length,
+                              itemCount: pageIndex == 0 ? _combinedMedia.length : currentAd.imageUrls.length,
                               itemBuilder: (context, imageIndex) {
-                                return InteractiveViewer(
-                                  child: Container(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    color: Colors.black,
-                                    child: Center(
-                                      child: Image.network(
-                                        currentAd.imageUrls[imageIndex],
-                                        fit: BoxFit.contain,
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Container(
-                                                  color: Colors.grey[800],
-                                                  child: const Center(
-                                                    child: Icon(
-                                                      Icons.business,
-                                                      color: Colors.white,
-                                                      size: 50,
+                                if (pageIndex == 0) {
+                                  // For current ad, use combined media
+                                  final media = _combinedMedia[imageIndex];
+                                  if (media['type'] == 'image') {
+                                    return _buildImageWidget(media['url']);
+                                  } else {
+                                    return _buildVideoWidget(media['url'], '${widget.ad.id}_video_${media['index']}');
+                                  }
+                                } else {
+                                  // For other ads, use only images (keeping original behavior)
+                                  return InteractiveViewer(
+                                    child: Container(
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      color: Colors.black,
+                                      child: Center(
+                                        child: Image.network(
+                                          currentAd.imageUrls[imageIndex],
+                                          fit: BoxFit.contain,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Container(
+                                                    color: Colors.grey[800],
+                                                    child: const Center(
+                                                      child: Icon(
+                                                        Icons.business,
+                                                        color: Colors.white,
+                                                        size: 50,
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                }
                               },
                             ),
 
