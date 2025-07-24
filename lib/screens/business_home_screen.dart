@@ -25,11 +25,13 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
   }
 
   void _loadData() {
+    print('🔄 Loading data...');
     final apiService = Provider.of<ApiService>(context, listen: false);
     setState(() {
       _featuredAdsFuture = apiService.getFeaturedAds();
       _allAdsFuture = apiService.getBusinessAds();
     });
+    print('🔄 Data loading initiated');
   }
 
   Future<void> _handleRefresh() async {
@@ -326,7 +328,12 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
             context,
             MaterialPageRoute(builder: (ctx) => const AddBusinessScreen()),
           );
-          if (result == true) _loadData();
+          if (result == true) {
+            print('✅ Ad created successfully, refreshing data...');
+            // Add a small delay to ensure backend has processed the new ad
+            await Future.delayed(const Duration(milliseconds: 500));
+            _loadData();
+          }
         },
         child: const Icon(Icons.add),
       ),
@@ -335,6 +342,7 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
 
   Widget _buildStyledAdCard(BusinessAd ad, {bool isFeatured = false}) {
     return AdCard(
+      key: ValueKey(ad.id), // Add key for proper widget identification
       ad: ad,
       isFeatured: isFeatured,
       onLongPress: () => _showDeleteConfirmationDialog(ad),
@@ -343,6 +351,7 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
 
   Widget _buildFullWidthAdCard(BusinessAd ad) {
     return AdCard(
+      key: ValueKey(ad.id), // Add key for proper widget identification
       ad: ad,
       isFeatured: false,
       onLongPress: () => _showDeleteConfirmationDialog(ad),

@@ -18,8 +18,8 @@ def lambda_handler(event, context):
     table = dynamodb.Table('BusinessAds')
     
     # Configuration
-    S3_BUCKET = 'business-ad-images-1'
-    CLOUDFRONT_DOMAIN = 'd11c102y3uxwr7.cloudfront.net'
+    S3_BUCKET = 'business-ad-images-bucket'
+    CLOUDFRONT_DOMAIN = 'd3jlaslrrj0f4d.cloudfront.net'
     
     try:
         # Parse request body
@@ -116,6 +116,7 @@ def lambda_handler(event, context):
             }
         
         images_removed = 0
+        videos_removed = 0
         
         if hard_delete:
             # Hard delete: Remove from DynamoDB and S3
@@ -143,6 +144,28 @@ def lambda_handler(event, context):
                     print(f"⚠️ Failed to delete image {image_url}: {str(s3_error)}")
                     # Continue with other images
             
+            # Delete videos from S3 if they exist
+            video_urls = ad_item.get('videoUrls', [])
+            for video_url in video_urls:
+                try:
+                    # Extract S3 key from CloudFront or S3 URL
+                    if CLOUDFRONT_DOMAIN in video_url:
+                        s3_key = video_url.split(CLOUDFRONT_DOMAIN + '/')[-1]
+                    elif 's3.amazonaws.com' in video_url:
+                        s3_key = video_url.split(S3_BUCKET + '/')[-1]
+                    else:
+                        # Assume it's already a key
+                        s3_key = video_url.replace('/', '', 1) if video_url.startswith('/') else video_url
+                    
+                    # Delete from S3
+                    s3_client.delete_object(Bucket=S3_BUCKET, Key=s3_key)
+                    videos_removed += 1
+                    print(f"🎥 Deleted video from S3: {s3_key}")
+                    
+                except Exception as s3_error:
+                    print(f"⚠️ Failed to delete video {video_url}: {str(s3_error)}")
+                    # Continue with other videos
+            
             # Delete from DynamoDB
             try:
                 table.delete_item(Key={'id': ad_id})
@@ -162,6 +185,7 @@ def lambda_handler(event, context):
                         'adId': ad_id,
                         'deleteType': 'hard',
                         'imagesRemoved': images_removed,
+                        'videosRemoved': videos_removed,
                         'timestamp': datetime.utcnow().isoformat()
                     })
                 }

@@ -3,8 +3,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as path;
 import 'dart:typed_data';
 import 'dart:math' as math;
+import 'dart:io';
 import '../models/business_ad.dart';
 import '../services/api_service.dart';
 
@@ -21,14 +23,18 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
-
+  
+  // Combined media selection (keeping original structure but combining images and videos)
   List<XFile> _selectedImages = [];
+  List<XFile> _selectedVideos = [];
   bool _isSubmitting = false;
   double _uploadProgress = 0;
+  
+  // Error and success messages
   String? _errorMessage;
   String? _successMessage;
   String? _selectedCategory;
-
+  
   // WeDeshi business categories
   final List<String> _categories = [
     'Restaurant & Food',
@@ -49,11 +55,12 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     'Other',
   ];
 
-  // Image optimization settings
+  // Media optimization settings
   static const int _maxImageWidth = 1920;
   static const int _maxImageHeight = 1080;
   static const int _imageQuality = 85;
-  static const int _maxFileSize = 5 * 1024 * 1024; // 5MB
+  static const int _maxImageFileSize = 5 * 1024 * 1024; // 5MB for images
+  static const int _maxVideoFileSize = 20 * 1024 * 1024; // 20MB for videos
 
   @override
   void dispose() {
@@ -63,56 +70,86 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImages() async {
+  Future<void> _pickMedia() async {
     try {
       setState(() {
         _errorMessage = null;
         _successMessage = null;
       });
 
-      final images = await _picker.pickMultiImage(
+      // Show media picker dialog for both images and videos
+      final List<XFile> media = await _picker.pickMultipleMedia(
+        requestFullMetadata: true,
         maxWidth: _maxImageWidth.toDouble(),
         maxHeight: _maxImageHeight.toDouble(),
         imageQuality: _imageQuality,
       );
 
-      if (images.isNotEmpty) {
-        if (images.length > 10) {
-          setState(() => _errorMessage = 'Maximum 10 images allowed');
-          _showErrorSnackbar(_errorMessage!);
-          return;
-        }
-
-        for (final image in images) {
-          final bytes = await image.readAsBytes();
-          if (bytes.length > _maxFileSize) {
+      if (media.isNotEmpty) {
+        List<XFile> validImages = [];
+        List<XFile> validVideos = [];
+        
+        for (XFile file in media) {
+          final bytes = await file.readAsBytes();
+          final isVideo = _isVideoFile(file.name);
+          final maxSize = isVideo ? _maxVideoFileSize : _maxImageFileSize;
+          
+          if (bytes.length > maxSize) {
             setState(() {
-              _errorMessage =
-                  'Image ${image.name} is too large. Maximum size is 5MB';
+              _errorMessage = '${file.name} is too large. Maximum size is ${isVideo ? '20MB' : '5MB'}';
             });
             _showErrorSnackbar(_errorMessage!);
-            return;
+            continue;
+          }
+          
+          if (isVideo) {
+            if (validVideos.length < 1) { // Max 1 video
+              validVideos.add(file);
+            } else {
+              setState(() {
+                _errorMessage = 'Maximum 1 video allowed';
+              });
+              _showErrorSnackbar(_errorMessage!);
+            }
+          } else {
+            if (validImages.length < 10) { // Max 10 images
+              validImages.add(file);
+            } else {
+              setState(() {
+                _errorMessage = 'Maximum 10 images allowed';
+              });
+              _showErrorSnackbar(_errorMessage!);
+            }
           }
         }
-
-        setState(() {
-          _selectedImages = images;
-          _successMessage = '${images.length} image(s) selected successfully';
-        });
-
-        _showSuccessSnackbar(_successMessage!);
+        
+        if (validImages.isNotEmpty || validVideos.isNotEmpty) {
+          setState(() {
+            _selectedImages = validImages;
+            _selectedVideos = validVideos;
+            _successMessage = '${validImages.length} image(s) and ${validVideos.length} video(s) selected successfully';
+          });
+          _showSuccessSnackbar(_successMessage!);
+        }
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Failed to pick images: ${e.toString()}');
+      setState(() => _errorMessage = 'Error picking media: $e');
       _showErrorSnackbar(_errorMessage!);
     }
+  }
+
+  bool _isVideoFile(String filename) {
+    final videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'];
+    final lowerFilename = filename.toLowerCase();
+    return videoExtensions.any((ext) => lowerFilename.endsWith(ext));
   }
 
   Future<void> _submitAd() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedImages.isEmpty) {
-      setState(() => _errorMessage = 'Please select at least one image');
+    // Check if at least one media file is selected
+    if (_selectedImages.isEmpty && _selectedVideos.isEmpty) {
+      setState(() => _errorMessage = 'Please select at least one image or video');
       _showErrorSnackbar(_errorMessage!);
       return;
     }
@@ -127,42 +164,71 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final List<String> imageUrls = [];
+      final List<String> videoUrls = [];
       final int totalImages = _selectedImages.length;
-
+      final int totalVideos = _selectedVideos.length;
+      final int totalMedia = totalImages + totalVideos;
+      
+      // Upload images
       for (int i = 0; i < totalImages; i++) {
         final image = _selectedImages[i];
-        final baseProgress = i / totalImages;
+        final baseProgress = i / totalMedia;
         setState(() {
           _uploadProgress = baseProgress;
         });
-
+        
         Uint8List bytes = await image.readAsBytes();
         if (!kIsWeb) {
           bytes = await _compressImage(bytes, image.name);
         }
-
+        
         final url = await apiService.uploadImageBytes(
           bytes,
           filename: _generateUniqueFilename(image.name),
           onProgress: (progress) {
             setState(() {
-              _uploadProgress = baseProgress + (progress / totalImages);
+              _uploadProgress = baseProgress + (progress / totalMedia);
             });
           },
         );
-
+        
         imageUrls.add(url);
         print('✅ Uploaded image ${i + 1}/$totalImages: ${image.name}');
       }
 
-      setState(() => _uploadProgress = 0.95);
+      // Upload videos
+      for (int i = 0; i < totalVideos; i++) {
+        final video = _selectedVideos[i];
+        final baseProgress = (totalImages + i) / totalMedia;
+        setState(() {
+          _uploadProgress = baseProgress;
+        });
 
+        Uint8List bytes = await video.readAsBytes();
+        
+        final url = await apiService.uploadImageBytes(
+          bytes,
+          filename: _generateUniqueFilename(video.name),
+          onProgress: (progress) {
+            setState(() {
+              _uploadProgress = baseProgress + (progress / totalMedia);
+            });
+          },
+        );
+
+        videoUrls.add(url);
+        print('✅ Uploaded video ${i + 1}/$totalVideos: ${video.name}');
+      }
+
+      setState(() => _uploadProgress = 0.95);
+      
       // Use the username from the form
       final ad = BusinessAd(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
         imageUrls: imageUrls,
+        videoUrls: videoUrls, // Add videoUrls to the ad
         userName: _userNameController.text.trim(),
         userId: _userNameController.text.trim().toLowerCase().replaceAll(
           ' ',
@@ -171,19 +237,20 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
         userProfileImage: null, // Optional profile image
         createdAt: DateTime.now(),
       );
-
+      
       await apiService.submitAd(ad);
-
+      
       setState(() {
         _uploadProgress = 1.0;
         _successMessage =
             'Great! ${_userNameController.text.trim()}\'s business ad is now live!';
       });
-
+      
       _showSuccessSnackbar(_successMessage!);
       await Future.delayed(const Duration(seconds: 1));
 
       if (mounted) Navigator.pop(context, true);
+      
     } catch (e) {
       setState(() {
         _errorMessage = 'Submission failed: ${e.toString()}';
@@ -224,11 +291,11 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
     }
   }
 
-  String _generateUniqueFilename(String originalFilename) {
+  String _generateUniqueFilename(String originalName) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final random = math.Random().nextInt(1000);
-    final extension = originalFilename.split('.').last;
-    return 'ad_${timestamp}_$random.$extension';
+    final extension = path.extension(originalName);
+    final nameWithoutExtension = path.basenameWithoutExtension(originalName);
+    return '${nameWithoutExtension}_$timestamp$extension';
   }
 
   String _formatBytes(int bytes) {
@@ -280,6 +347,92 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                         fontFamily: 'Montserrat',
                       ),
                       textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        } else if (snapshot.hasError) {
+          return Container(
+            color: Colors.grey[300],
+            child: const Icon(Icons.error, color: Colors.red),
+          );
+        } else {
+          return Container(
+            color: Colors.grey[100],
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildVideoPreview(XFile video) {
+    return FutureBuilder<Uint8List>(
+      future: video.readAsBytes(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: Icon(
+                      Icons.videocam,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.7),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                    child: Text(
+                      _formatBytes(snapshot.data!.length),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Montserrat',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+                // Play button overlay
+                Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.6),
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: const Icon(
+                      Icons.play_arrow,
+                      size: 24,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -440,7 +593,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
       ),
       dividerColor: const Color(0xFFE0E0E0),
     );
-
+    
     return Theme(
       data: customTheme,
       child: Scaffold(
@@ -648,7 +801,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Image selection
+                  // Combined Media Selection
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -656,12 +809,12 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Business Images *',
+                            'Business Media *',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Select up to 10 images (max 5MB each). Multiple images will automatically slide in your ad post!',
+                            'Select images (max 5MB each) and videos (max 20MB each). Multiple files will automatically slide in your ad post!',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                           const SizedBox(height: 16),
@@ -669,11 +822,11 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                           OutlinedButton.icon(
                             icon: const Icon(Icons.add_photo_alternate),
                             label: Text(
-                              _selectedImages.isEmpty
-                                  ? 'Select Images'
-                                  : 'Change Images (${_selectedImages.length})',
+                              _selectedImages.isEmpty && _selectedVideos.isEmpty
+                                  ? 'Select Media'
+                                  : 'Change Media (${_selectedImages.length + _selectedVideos.length})',
                             ),
-                            onPressed: _isSubmitting ? null : _pickImages,
+                            onPressed: _isSubmitting ? null : _pickMedia,
                             style: OutlinedButton.styleFrom(
                               foregroundColor: const Color(0xFFFF6B35),
                               side: const BorderSide(color: Color(0xFFFF6B35)),
@@ -689,16 +842,17 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Selected: ${_selectedImages.length} image(s)',
+                                'Selected: ${_selectedImages.length} image(s), ${_selectedVideos.length} video(s)',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
-                              if (_selectedImages.isNotEmpty)
+                              if (_selectedImages.isNotEmpty || _selectedVideos.isNotEmpty)
                                 TextButton.icon(
                                   onPressed: _isSubmitting
                                       ? null
                                       : () {
                                           setState(() {
                                             _selectedImages.clear();
+                                            _selectedVideos.clear();
                                             _successMessage = null;
                                           });
                                         },
@@ -733,11 +887,11 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                               physics: const NeverScrollableScrollPhysics(),
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    crossAxisSpacing: 8,
-                                    mainAxisSpacing: 8,
-                                    childAspectRatio: 1,
-                                  ),
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                childAspectRatio: 1,
+                              ),
                               itemCount: _selectedImages.length,
                               itemBuilder: (context, index) => Stack(
                                 fit: StackFit.expand,
@@ -752,6 +906,68 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                                           : () {
                                               setState(() {
                                                 _selectedImages.removeAt(index);
+                                              });
+                                            },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.red.withOpacity(0.8),
+                                        ),
+                                        padding: const EdgeInsets.all(4),
+                                        child: const Icon(
+                                          Icons.close,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  if (_selectedVideos.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Video Preview',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                childAspectRatio: 16 / 9,
+                              ),
+                              itemCount: _selectedVideos.length,
+                              itemBuilder: (context, index) => Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  _buildVideoPreview(_selectedVideos[index]),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: GestureDetector(
+                                      onTap: _isSubmitting
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                _selectedVideos.removeAt(index);
                                               });
                                             },
                                       child: Container(
@@ -792,7 +1008,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: LinearProgressIndicator(
-                                value: _uploadProgress,
+                                value: _uploadProgress.clamp(0.0, 1.0),
                                 minHeight: 8,
                                 valueColor: const AlwaysStoppedAnimation(
                                   Color(0xFFFF6B35),
@@ -802,7 +1018,7 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '${(_uploadProgress * 100).toStringAsFixed(1)}% complete',
+                              '${(_uploadProgress * 100).clamp(0.0, 100.0).toStringAsFixed(1)}% complete',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],

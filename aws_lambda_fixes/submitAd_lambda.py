@@ -15,7 +15,7 @@ def lambda_handler(event, context):
     table = dynamodb.Table('BusinessAds')
     
     # Configuration
-    CLOUDFRONT_DOMAIN = 'd11c102y3uxwr7.cloudfront.net'
+    CLOUDFRONT_DOMAIN = 'd3jlaslrrj0f4d.cloudfront.net'
     TTL_DAYS = 30  # Time to live in days
     
     try:
@@ -28,10 +28,13 @@ def lambda_handler(event, context):
         else:
             body = event
         
-        print(f"📥 Submit request: {json.dumps(body, default=str)}")
+        print(f"🔍 Raw event body: {repr(event.get('body'))}")
+        print(f"📥 Parsed body keys: {list(body.keys())}")
+        print(f"🎥 Video URLs received: {body.get('videoUrls', [])}")
+        print(f"🖼️ Image URLs received: {body.get('imageUrls', [])}")
         
         # Validate required fields
-        required_fields = ['title', 'description', 'imageUrls', 'userName']
+        required_fields = ['title', 'description', 'userName']
         for field in required_fields:
             if not body.get(field):
                 return {
@@ -49,6 +52,26 @@ def lambda_handler(event, context):
                     })
                 }
         
+        # Check if at least one media type is provided
+        image_urls = body.get('imageUrls', [])
+        video_urls = body.get('videoUrls', [])
+        
+        if not image_urls and not video_urls:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+                    'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                },
+                'body': json.dumps({
+                    'success': False,
+                    'error': 'At least one image or video is required',
+                    'timestamp': datetime.utcnow().isoformat()
+                })
+            }
+        
         # Generate unique ad ID
         ad_id = str(uuid.uuid4())
         
@@ -57,9 +80,16 @@ def lambda_handler(event, context):
         user_id = body.get('userId', user_name.lower().replace(' ', '_').replace('-', '_'))
         
         # Normalize image URLs to CloudFront
-        image_urls = body['imageUrls']
         if isinstance(image_urls, str):
             image_urls = [image_urls]
+        elif not image_urls:
+            image_urls = []
+        
+        # Normalize video URLs to CloudFront
+        if isinstance(video_urls, str):
+            video_urls = [video_urls]
+        elif not video_urls:
+            video_urls = []
         
         normalized_urls = []
         for url in image_urls:
@@ -79,6 +109,24 @@ def lambda_handler(event, context):
             
             normalized_urls.append(normalized_url)
         
+        normalized_video_urls = []
+        for url in video_urls:
+            if url.startswith('http'):
+                # Convert S3 URLs to CloudFront
+                if 's3.amazonaws.com' in url:
+                    # Extract the path after the bucket name
+                    path = url.split('/')[-1]  # Get filename
+                    normalized_url = f"https://{CLOUDFRONT_DOMAIN}/ads/{path}"
+                elif CLOUDFRONT_DOMAIN in url:
+                    normalized_url = url  # Already CloudFront
+                else:
+                    normalized_url = url  # Keep as is
+            else:
+                # Assume it's a path, prepend CloudFront domain
+                normalized_url = f"https://{CLOUDFRONT_DOMAIN}/{url}"
+            
+            normalized_video_urls.append(normalized_url)
+        
         # Calculate quality score for featured determination (7-point system)
         quality_score = 0
         
@@ -90,6 +138,11 @@ def lambda_handler(event, context):
             quality_score += 2
         elif image_count == 1:
             quality_score += 1
+        
+        # Video quality (0-2 points) - additional points for videos
+        video_count = len(normalized_video_urls)
+        if video_count >= 1:
+            quality_score += 2
         
         # Description quality (0-2 points)
         description = body['description']
@@ -126,6 +179,7 @@ def lambda_handler(event, context):
             'title': body['title'],
             'description': description,
             'imageUrls': normalized_urls,
+            'videoUrls': normalized_video_urls, # Add video URLs to the item
             'userName': user_name,
             'userId': user_id,
             'createdAt': current_time_iso,
@@ -135,6 +189,7 @@ def lambda_handler(event, context):
             'status': 'active',
             'featured': is_featured,
             'imageCount': image_count,
+            'videoCount': video_count, # Add video count to the item
             'likes': 0,
             'viewCount': 0,
             'comments': []
@@ -146,7 +201,8 @@ def lambda_handler(event, context):
             if body.get(field):
                 ad_item[field] = body[field]
         
-        print(f"💾 Saving ad item with TTL: {json.dumps(ad_item, default=str)}")
+        print(f"💾 Storing ad with videoUrls: {ad_item['videoUrls']}")
+        print(f"💾 Storing ad with imageUrls: {ad_item['imageUrls']}")
         
         # Save to DynamoDB
         table.put_item(Item=ad_item)
@@ -171,6 +227,7 @@ def lambda_handler(event, context):
                 'userName': user_name,
                 'userId': user_id,
                 'imageCount': image_count,
+                'videoCount': video_count, # Include video count in response
                 'createdAt': current_time_iso,
                 'expiresAt': expiration_iso,
                 'ttlDays': TTL_DAYS

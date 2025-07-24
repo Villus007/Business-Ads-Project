@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import 'dart:convert';
 import 'dart:async';
 import '../models/business_ad.dart';
@@ -30,6 +32,14 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
   late PageController _pageController;
   int _currentImageIndex = 0;
   Timer? _autoSlideTimer;
+  
+  // Video player controllers
+  Map<String, VideoPlayerController> _videoControllers = {};
+  Map<String, ChewieController> _chewieControllers = {};
+  Map<String, bool> _videoInitialized = {};
+  
+  // Track if any video is currently playing
+  bool _isVideoPlaying = false;
 
   @override
   void initState() {
@@ -37,9 +47,39 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
     likeCount = widget.ad.likes;
     _pageController = PageController();
 
-    // Start auto slide timer if there are multiple images
-    if (widget.ad.imageUrls.length > 1) {
+    // Start auto slide timer if there are multiple media items
+    if ((widget.ad.imageUrls.length + widget.ad.videoUrls.length) > 1) {
       _startAutoSlideTimer();
+    }
+    
+    // Initialize video controllers
+    _initializeVideoControllers();
+  }
+
+  @override
+  void didUpdateWidget(AdCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Check if the ad has changed (new ad loaded)
+    if (oldWidget.ad.id != widget.ad.id) {
+      print('🔄 Ad changed, re-initializing video controllers');
+      
+      // Dispose old controllers
+      for (var controller in _videoControllers.values) {
+        controller.dispose();
+      }
+      for (var controller in _chewieControllers.values) {
+        controller.dispose();
+      }
+      
+      // Clear maps
+      _videoControllers.clear();
+      _chewieControllers.clear();
+      _videoInitialized.clear();
+      _isVideoPlaying = false;
+      
+      // Initialize new controllers
+      _initializeVideoControllers();
     }
   }
 
@@ -47,13 +87,29 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
   void dispose() {
     _autoSlideTimer?.cancel();
     _pageController.dispose();
+    
+    // Dispose video controllers
+    for (var controller in _videoControllers.values) {
+      controller.dispose();
+    }
+    for (var controller in _chewieControllers.values) {
+      controller.dispose();
+    }
+    
     super.dispose();
   }
 
   void _startAutoSlideTimer() {
     _autoSlideTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (mounted && widget.ad.imageUrls.length > 1) {
-        final nextIndex = (_currentImageIndex + 1) % widget.ad.imageUrls.length;
+      if (mounted && (widget.ad.imageUrls.length + widget.ad.videoUrls.length) > 1) {
+        // Don't auto-scroll if a video is currently playing
+        if (_isVideoPlaying) {
+          print('🎬 Auto-scroll paused - video is playing');
+          return;
+        }
+        
+        final totalMedia = widget.ad.imageUrls.length + widget.ad.videoUrls.length;
+        final nextIndex = (_currentImageIndex + 1) % totalMedia;
         _pageController.animateToPage(
           nextIndex,
           duration: const Duration(milliseconds: 350),
@@ -61,6 +117,71 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
         );
       }
     });
+  }
+
+  void _initializeVideoControllers() async {
+    print('🎥 Initializing videos for ad: ${widget.ad.id}');
+    print('🎥 Video URLs: ${widget.ad.videoUrls}');
+    
+    for (int i = 0; i < widget.ad.videoUrls.length; i++) {
+      final videoUrl = widget.ad.videoUrls[i];
+      final videoKey = '${widget.ad.id}_video_$i';
+      
+      try {
+        final videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+        await videoController.initialize();
+        
+        print('✅ Video $i initialized: $videoUrl');
+        
+        final chewieController = ChewieController(
+          videoPlayerController: videoController,
+          autoPlay: false,
+          looping: false,
+          aspectRatio: videoController.value.aspectRatio,
+          allowFullScreen: true,
+          allowMuting: true,
+          showControls: true,
+          placeholder: Container(
+            color: Colors.black,
+            child: const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+          ),
+        );
+        
+        // Add listener to track video play/pause state
+        videoController.addListener(() {
+          if (mounted) {
+            final isPlaying = videoController.value.isPlaying;
+            if (isPlaying != _isVideoPlaying) {
+              setState(() {
+                _isVideoPlaying = isPlaying;
+              });
+              print('🎬 Video play state: ${isPlaying ? "playing" : "paused"}');
+            }
+          }
+        });
+        
+        if (mounted) {
+          setState(() {
+            _videoControllers[videoKey] = videoController;
+            _chewieControllers[videoKey] = chewieController;
+            _videoInitialized[videoKey] = true;
+          });
+        }
+      } catch (e) {
+        print('❌ Video $i failed: $e');
+        if (mounted) {
+          setState(() {
+            _videoInitialized[videoKey] = false;
+          });
+        }
+      }
+    }
+    
+    print('🎥 Video initialization complete: ${widget.ad.videoUrls.length} videos');
   }
 
   void _onImageChanged(int index) {
@@ -206,13 +327,13 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
             ),
           ),
 
-          // Image carousel (clickable to full screen)
-          if (widget.ad.imageUrls.isNotEmpty)
+          // Media carousel (clickable to full screen)
+          if (widget.ad.imageUrls.isNotEmpty || widget.ad.videoUrls.isNotEmpty)
             GestureDetector(
               onTap: () => _navigateToImageDetail(context),
               onLongPress: () {
                 print(
-                  '👆 LONG PRESS DETECTED on image! Ad: ${widget.ad.title}',
+                  '👆 LONG PRESS DETECTED on media! Ad: ${widget.ad.title}',
                 );
                 HapticFeedback.mediumImpact();
                 if (widget.onLongPress != null) {
@@ -229,18 +350,25 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
                   width: double.infinity,
                   child: Stack(
                     children: [
-                      // Image carousel
+                      // Mixed media carousel
                       PageView.builder(
                         controller: _pageController,
                         onPageChanged: _onImageChanged,
-                        itemCount: widget.ad.imageUrls.length,
+                        itemCount: widget.ad.imageUrls.length + widget.ad.videoUrls.length,
                         itemBuilder: (context, index) {
-                          return _buildImageWidget(widget.ad.imageUrls[index]);
+                          if (index < widget.ad.imageUrls.length) {
+                            // Display image
+                            return _buildImageWidget(widget.ad.imageUrls[index]);
+                          } else {
+                            // Display video
+                            final videoIndex = index - widget.ad.imageUrls.length;
+                            return _buildVideoWidget(widget.ad.videoUrls[videoIndex], videoIndex);
+                          }
                         },
                       ),
 
-                      // Image counter overlay (top right)
-                      if (widget.ad.imageUrls.length > 1)
+                      // Media counter overlay (top right)
+                      if (widget.ad.imageUrls.length + widget.ad.videoUrls.length > 1)
                         Positioned(
                           top: 8,
                           right: 8,
@@ -254,7 +382,7 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              '${_currentImageIndex + 1}/${widget.ad.imageUrls.length}',
+                              '${_currentImageIndex + 1}/${widget.ad.imageUrls.length + widget.ad.videoUrls.length}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -265,7 +393,7 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
                         ),
 
                       // Dots indicator (bottom center)
-                      if (widget.ad.imageUrls.length > 1)
+                      if (widget.ad.imageUrls.length + widget.ad.videoUrls.length > 1)
                         Positioned(
                           bottom: 12,
                           left: 0,
@@ -273,7 +401,7 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: List.generate(
-                              widget.ad.imageUrls.length,
+                              widget.ad.imageUrls.length + widget.ad.videoUrls.length,
                               (index) => Container(
                                 margin: const EdgeInsets.symmetric(
                                   horizontal: 3,
@@ -323,6 +451,34 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
   }
 
   Widget _buildImageWidget(String imageUrl) {
+    // Check if it's actually a video URL (shouldn't happen, but just in case)
+    if (_isVideoUrl(imageUrl)) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.videocam,
+                color: Colors.white,
+                size: 48,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Video Content',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     // Check if it's a data URL (for local development)
     if (imageUrl.startsWith('data:image/')) {
       try {
@@ -349,6 +505,125 @@ class _AdCardState extends State<AdCard> with TickerProviderStateMixin {
       errorWidget: (context, url, error) => _buildErrorWidget(),
       httpHeaders: const {'User-Agent': 'Flutter App'},
     );
+  }
+  
+  // Helper method to detect video URLs
+  bool _isVideoUrl(String url) {
+    final videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'];
+    final lowerUrl = url.toLowerCase();
+    return videoExtensions.any((ext) => lowerUrl.endsWith(ext));
+  }
+
+  Widget _buildVideoWidget(String videoUrl, int index) {
+    final videoKey = '${widget.ad.id}_video_$index';
+    final chewieController = _chewieControllers[videoKey];
+    final isInitialized = _videoInitialized[videoKey] ?? false;
+
+    if (chewieController == null || !isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Video thumbnail or placeholder
+            Container(
+              color: Colors.grey[800],
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.videocam,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Loading Video...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Play button overlay
+            Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withOpacity(0.6),
+                ),
+                padding: const EdgeInsets.all(12),
+                child: const Icon(
+                  Icons.play_arrow,
+                  size: 32,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final isVideoInitialized = chewieController.videoPlayerController.value.isInitialized;
+    
+    if (isVideoInitialized) {
+      return Chewie(
+        controller: chewieController,
+      );
+    } else {
+      return Container(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              color: Colors.grey[800],
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.videocam,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Video Loading...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withOpacity(0.6),
+                ),
+                padding: const EdgeInsets.all(12),
+                child: const Icon(
+                  Icons.play_arrow,
+                  size: 32,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildErrorWidget() {

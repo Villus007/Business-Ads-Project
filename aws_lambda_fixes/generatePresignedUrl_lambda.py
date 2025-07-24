@@ -11,8 +11,8 @@ def lambda_handler(event, context):
     """
     
     # Configuration
-    S3_BUCKET = 'business-ad-images-1'
-    CLOUDFRONT_DOMAIN = 'd11c102y3uxwr7.cloudfront.net'
+    S3_BUCKET = 'business-ad-images-bucket'
+    CLOUDFRONT_DOMAIN = 'd3jlaslrrj0f4d.cloudfront.net'
     
     # Initialize S3 client
     s3_client = boto3.client('s3')
@@ -48,7 +48,14 @@ def lambda_handler(event, context):
             'image/jpg': 'jpg',
             'image/png': 'png',
             'image/gif': 'gif',
-            'image/webp': 'webp'
+            'image/webp': 'webp',
+            # Video formats
+            'video/mp4': 'mp4',
+            'video/quicktime': 'mov',
+            'video/x-msvideo': 'avi',
+            'video/x-matroska': 'mkv',
+            'video/webm': 'webm',
+            'video/3gpp': '3gp'
         }
         
         if content_type not in allowed_types:

@@ -9,7 +9,7 @@ enum ImageUploadStrategy { directUpload, preSignedUrl }
 
 class ApiService extends ChangeNotifier {
   static const String _baseUrl =
-      "https://um7x7rirpc.execute-api.us-east-1.amazonaws.com/prod";
+      "https://sbpnoeif5j.execute-api.us-east-1.amazonaws.com/prod";
 
   // Development mode flag - set to true to work with local storage instead of AWS
   static const bool _isDevelopmentMode = false;
@@ -159,40 +159,72 @@ class ApiService extends ChangeNotifier {
   Future<Map<String, String>> _getPresignedUploadUrl(String filename) async {
     try {
       final contentType = _getContentType(filename);
-      final response = await http
-          .get(
-            Uri.parse(
-              '$_baseUrl/presigned-url?filename=$filename&contentType=$contentType',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-          )
-          .timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        print('🔗 Presigned URL response: ${responseData.toString()}');
-
-        // Check if response contains required fields
-        if (responseData['uploadUrl'] == null) {
-          throw Exception('uploadUrl is null in presigned URL response');
+      
+      // URL encode the parameters to handle special characters
+      final encodedFilename = Uri.encodeComponent(filename);
+      final encodedContentType = Uri.encodeComponent(contentType);
+      
+      // Try different endpoint variations
+      final endpoints = [
+        '$_baseUrl/generate-presigned-url',
+        '$_baseUrl/generatePresignedUrl',
+        '$_baseUrl/presigned-url',
+        '$_baseUrl/presignedUrl',
+      ];
+      
+      http.Response? response;
+      String? usedEndpoint;
+      
+      for (final endpoint in endpoints) {
+        try {
+          print('🔗 Trying endpoint: $endpoint');
+          
+          response = await http
+              .get(
+                Uri.parse(
+                  '$endpoint?filename=$encodedFilename&contentType=$encodedContentType',
+                ),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                },
+              )
+              .timeout(const Duration(seconds: 10));
+              
+          print('🔗 Response status for $endpoint: ${response.statusCode}');
+          
+          if (response.statusCode == 200) {
+            usedEndpoint = endpoint;
+            break;
+          }
+        } catch (e) {
+          print('❌ Failed to try $endpoint: $e');
+          continue;
         }
-        if (responseData['cloudFrontUrl'] == null) {
-          throw Exception('cloudFrontUrl is null in presigned URL response');
-        }
-
-        return {
-          'uploadUrl': responseData['uploadUrl'] as String,
-          'cloudFrontUrl': responseData['cloudFrontUrl'] as String,
-        };
-      } else {
-        print(
-          '❌ Presigned URL error: ${response.statusCode} - ${response.body}',
-        );
-        throw Exception('Failed to get presigned URL: ${response.statusCode}');
       }
+      
+      if (response == null || response.statusCode != 200) {
+        throw Exception('All presigned URL endpoints failed. Last status: ${response?.statusCode}');
+      }
+
+      print('🔗 Successful endpoint: $usedEndpoint');
+      print('🔗 Response body: ${response.body}');
+
+      final responseData = jsonDecode(response.body);
+      print('🔗 Presigned URL response: ${responseData.toString()}');
+
+      // Check if response contains required fields
+      if (responseData['uploadUrl'] == null) {
+        throw Exception('uploadUrl is null in presigned URL response');
+      }
+      if (responseData['cloudFrontUrl'] == null) {
+        throw Exception('cloudFrontUrl is null in presigned URL response');
+      }
+
+      return {
+        'uploadUrl': responseData['uploadUrl'] as String,
+        'cloudFrontUrl': responseData['cloudFrontUrl'] as String,
+      };
     } catch (e) {
       print('❌ Presigned URL exception: ${e.toString()}');
       throw Exception('Failed to get presigned URL: ${e.toString()}');
@@ -212,6 +244,19 @@ class ApiService extends ChangeNotifier {
         return 'image/gif';
       case 'webp':
         return 'image/webp';
+      // Video formats
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'avi':
+        return 'video/x-msvideo';
+      case 'mkv':
+        return 'video/x-matroska';
+      case 'webm':
+        return 'video/webm';
+      case '3gp':
+        return 'video/3gpp';
       default:
         return 'image/jpeg';
     }
@@ -220,6 +265,12 @@ class ApiService extends ChangeNotifier {
   /// Enhanced submitAd method with better error handling
   Future<void> submitAd(BusinessAd ad) async {
     try {
+      // Test API connectivity first
+      final isConnected = await testApiConnectivity();
+      if (!isConnected) {
+        throw Exception('Cannot connect to API. Please check your internet connection and API endpoints.');
+      }
+      
       // Cache user information locally for this ad (both by ID and username)
       final userInfo = {
         'userName': ad.userName,
@@ -231,14 +282,17 @@ class ApiService extends ChangeNotifier {
       _userInfoCache[ad.id] = userInfo;
       _userInfoByName[ad.userName.toLowerCase()] = userInfo;
 
-      print('🚀 Submitting ad to AWS: ${ad.title}');
-      print('📄 Ad data: ${jsonEncode(ad.toJson())}');
-      print('🌐 API URL: $_baseUrl/');
+      print('🚀 Submitting ad: ${ad.title}');
+      print('🎥 Video URLs being sent: ${ad.videoUrls}');
+      print('🖼️ Image URLs being sent: ${ad.imageUrls}');
+
+      final requestBody = jsonEncode(ad.toJson());
+      print('📤 HTTP Request body: $requestBody');
 
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/'), // Changed from '/ads' to '/'
-            body: jsonEncode(ad.toJson()),
+            Uri.parse('$_baseUrl/submit-ad'), // Updated to use submit-ad endpoint
+            body: requestBody,
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -291,7 +345,7 @@ class ApiService extends ChangeNotifier {
     try {
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/ads?featured=true'),
+            Uri.parse('$_baseUrl/get-ads?featured=true'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -324,7 +378,7 @@ class ApiService extends ChangeNotifier {
     try {
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/ads?userId=$userId'),
+            Uri.parse('$_baseUrl/get-ads?userId=$userId'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -357,7 +411,7 @@ class ApiService extends ChangeNotifier {
     try {
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/ads?userName=$userName'),
+            Uri.parse('$_baseUrl/get-ads?userName=$userName'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -391,7 +445,7 @@ class ApiService extends ChangeNotifier {
     try {
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/ads'),
+            Uri.parse('$_baseUrl/get-ads'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -431,6 +485,7 @@ class ApiService extends ChangeNotifier {
               title: ad.title,
               description: ad.description,
               imageUrls: ad.imageUrls,
+              videoUrls: ad.videoUrls, // Preserve video URLs
               userName: cachedInfo['userName'] ?? ad.userName,
               userId: cachedInfo['userId'] ?? ad.userId,
               userProfileImage:
@@ -486,10 +541,10 @@ class ApiService extends ChangeNotifier {
         print('✅ Ad deleted from local storage');
         return true;
       } else {
-        // In production mode, send proper DELETE request to root endpoint
+        // In production mode, send proper DELETE request to deleteBusinessAd-lambda endpoint
         final response = await http
             .delete(
-              Uri.parse('$_baseUrl/'),
+              Uri.parse('$_baseUrl/deleteBusinessAd-lambda'),
               headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
@@ -535,6 +590,37 @@ class ApiService extends ChangeNotifier {
       }
     } catch (e) {
       print('❌ Error deleting ad: $e');
+      return false;
+    }
+  }
+
+  /// Test API connectivity
+  Future<bool> testApiConnectivity() async {
+    try {
+      print('🧪 Testing API connectivity...');
+      
+      // Test the get-ads endpoint first
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/get-ads'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+          
+      print('🧪 Get-ads test status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        print('✅ API connectivity test passed');
+        return true;
+      } else {
+        print('❌ API connectivity test failed: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ API connectivity test exception: $e');
       return false;
     }
   }

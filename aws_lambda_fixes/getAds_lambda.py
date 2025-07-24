@@ -15,7 +15,7 @@ def lambda_handler(event, context):
     table = dynamodb.Table('BusinessAds')
     
     # Configuration
-    CLOUDFRONT_DOMAIN = 'd11c102y3uxwr7.cloudfront.net'
+    CLOUDFRONT_DOMAIN = 'd3jlaslrrj0f4d.cloudfront.net'
     
     try:
         # Parse query parameters
@@ -88,6 +88,11 @@ def lambda_handler(event, context):
         for item in items:
             # Convert Decimals to floats
             processed_item = json.loads(json.dumps(item, default=decimal_to_float))
+            
+            # Debug: Check video URLs
+            print(f"📄 Ad {processed_item.get('id', 'unknown')}:")
+            print(f"   🎥 Video URLs from DB: {processed_item.get('videoUrls', [])}")
+            print(f"   🖼️ Image URLs from DB: {processed_item.get('imageUrls', [])}")
             
             # Ensure social media fields have defaults
             processed_item.setdefault('likes', 0)

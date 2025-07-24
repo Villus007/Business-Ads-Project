@@ -23,8 +23,8 @@ def lambda_handler(event, context):
     table = dynamodb.Table('BusinessAds')
     
     # Configuration
-    S3_BUCKET = 'business-ad-images-1'
-    CLOUDFRONT_DOMAIN = 'd11c102y3uxwr7.cloudfront.net'
+    S3_BUCKET = 'business-ad-images-bucket'
+    CLOUDFRONT_DOMAIN = 'd3jlaslrrj0f4d.cloudfront.net'
     TTL_DAYS = 30  # Time to live in days
     
     print(f"🕒 TTL Cleanup started at {datetime.utcnow().isoformat()}")
@@ -84,6 +84,7 @@ def lambda_handler(event, context):
         # Track cleanup statistics
         ads_deleted = 0
         images_removed = 0
+        videos_removed = 0 # Added for video cleanup
         errors = []
         
         # Process each expired ad
@@ -97,8 +98,11 @@ def lambda_handler(event, context):
             try:
                 # Extract and delete S3 images
                 image_urls = ad.get('imageUrls', [])
+                video_urls = ad.get('videoUrls', [])  # Handle video URLs
                 ad_images_removed = 0
+                ad_videos_removed = 0
                 
+                # Delete images
                 if image_urls:
                     print(f"🖼️ Removing {len(image_urls)} images from S3...")
                     
@@ -111,12 +115,34 @@ def lambda_handler(event, context):
                                 # Delete from S3
                                 s3_client.delete_object(Bucket=S3_BUCKET, Key=s3_key)
                                 ad_images_removed += 1
-                                print(f"✅ Deleted S3 object: {s3_key}")
+                                print(f"✅ Deleted S3 image: {s3_key}")
                             else:
-                                print(f"⚠️ Could not extract S3 key from URL: {image_url}")
+                                print(f"⚠️ Could not extract S3 key from image URL: {image_url}")
                                 
                         except Exception as s3_error:
                             error_msg = f"Failed to delete image {image_url}: {str(s3_error)}"
+                            print(f"❌ {error_msg}")
+                            errors.append(error_msg)
+                
+                # Delete videos
+                if video_urls:
+                    print(f"🎥 Removing {len(video_urls)} videos from S3...")
+                    
+                    for video_url in video_urls:
+                        try:
+                            # Extract S3 key from CloudFront URL
+                            s3_key = extract_s3_key_from_url(video_url, CLOUDFRONT_DOMAIN)
+                            
+                            if s3_key:
+                                # Delete from S3
+                                s3_client.delete_object(Bucket=S3_BUCKET, Key=s3_key)
+                                ad_videos_removed += 1
+                                print(f"✅ Deleted S3 video: {s3_key}")
+                            else:
+                                print(f"⚠️ Could not extract S3 key from video URL: {video_url}")
+                                
+                        except Exception as s3_error:
+                            error_msg = f"Failed to delete video {video_url}: {str(s3_error)}"
                             print(f"❌ {error_msg}")
                             errors.append(error_msg)
                 
@@ -124,8 +150,9 @@ def lambda_handler(event, context):
                 table.delete_item(Key={'id': ad_id})
                 ads_deleted += 1
                 images_removed += ad_images_removed
+                videos_removed += ad_videos_removed
                 
-                print(f"✅ Successfully deleted ad {ad_id} with {ad_images_removed} images")
+                print(f"✅ Successfully deleted ad {ad_id} with {ad_images_removed} images and {ad_videos_removed} videos")
                 
             except Exception as e:
                 error_msg = f"Failed to delete ad {ad_id}: {str(e)}"
@@ -137,6 +164,7 @@ def lambda_handler(event, context):
         print(f"🎉 TTL Cleanup completed:")
         print(f"   📊 Ads deleted: {ads_deleted}")
         print(f"   🖼️ Images removed: {images_removed}")
+        print(f"   🎥 Videos removed: {videos_removed}") # Added for video cleanup
         print(f"   ❌ Errors: {len(errors)}")
         
         # Prepare response
@@ -145,6 +173,7 @@ def lambda_handler(event, context):
             'message': f'TTL cleanup completed successfully',
             'ads_deleted': ads_deleted,
             'images_removed': images_removed,
+            'videos_removed': videos_removed, # Added for video cleanup
             'cutoff_date': cutoff_iso,
             'ttl_days': TTL_DAYS,
             'errors': errors,
